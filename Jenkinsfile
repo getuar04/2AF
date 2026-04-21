@@ -29,11 +29,21 @@ pipeline {
       }
     }
 
+    stage('Pre-pull Base Image') {
+      steps {
+        retry(2) {
+          sh 'docker pull node:20-alpine'
+        }
+      }
+    }
+
     stage('Build Docker Image') {
       steps {
-        sh """
-          docker build -t ${IMAGE_NAME}:${IMAGE_TAG} -t ${IMAGE_NAME}:latest .
-        """
+        retry(2) {
+          sh """
+            docker build -t ${IMAGE_NAME}:${IMAGE_TAG} -t ${IMAGE_NAME}:latest .
+          """
+        }
       }
     }
 
@@ -71,5 +81,3 @@ pipeline {
     }
   }
 }
-
-
