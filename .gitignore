@@ -5,3 +5,7 @@ coverage/
 .vscode/
 .idea/
 *.log
+
+
+# Kubernetes secrets
+k8s/secret.yaml

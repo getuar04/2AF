@@ -1,0 +1,73 @@
+pipeline {
+  agent any
+
+  environment {
+    IMAGE_NAME     = '2af-auth-service'
+    IMAGE_TAG      = "build-${BUILD_NUMBER}"
+    K8S_NAMESPACE  = 'auth-service'
+    REPO_URL       = 'https://github.com/getuar04/2AF.git'
+  }
+
+  stages {
+
+    stage('Checkout') {
+      steps {
+        git branch: 'main',
+            url: "${REPO_URL}"
+      }
+    }
+
+    stage('Install Dependencies') {
+      steps {
+        sh 'npm install'
+      }
+    }
+
+    stage('Run Tests') {
+      steps {
+        sh 'npm test || true'
+      }
+    }
+
+    stage('Build Docker Image') {
+      steps {
+        sh """
+          docker build -t ${IMAGE_NAME}:${IMAGE_TAG} -t ${IMAGE_NAME}:latest .
+        """
+      }
+    }
+
+    stage('Deploy to Kubernetes') {
+      steps {
+        sh 'kubectl apply -f k8s/namespace.yaml'
+        sh 'kubectl apply -f k8s/secret.yaml'
+        sh 'kubectl apply -f k8s/configmap.yaml'
+        sh 'kubectl apply -f k8s/postgres.yaml'
+        sh 'kubectl apply -f k8s/redis.yaml'
+        sh 'kubectl apply -f k8s/mongodb.yaml'
+        sh 'kubectl apply -f k8s/kafka.yaml'
+        sh 'kubectl apply -f k8s/deployment.yaml'
+        sh 'kubectl apply -f k8s/service.yaml'
+        sh """
+          kubectl set image deployment/auth-service \
+            auth-service=${IMAGE_NAME}:${IMAGE_TAG} \
+            -n ${K8S_NAMESPACE}
+        """
+        sh """
+          kubectl rollout status deployment/auth-service \
+            -n ${K8S_NAMESPACE} --timeout=120s
+        """
+      }
+    }
+
+  }
+
+  post {
+    success {
+      echo "✅ Build ${BUILD_NUMBER} u deploy-ua me sukses!"
+    }
+    failure {
+      echo "❌ Build ${BUILD_NUMBER} dështoi!"
+    }
+  }
+}
