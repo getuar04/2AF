@@ -1,0 +1,70 @@
+sequenceDiagram
+    autonumber
+
+    actor U as User
+    participant F as Frontend
+    participant A as Auth Service
+    participant D as User Database
+    participant C as Cache
+    participant G as Google Authenticator App
+
+    Note over U,D: 1. User registers account
+    U->>F: Fill register form
+    F->>A: POST /auth/register {fullName, email, password}
+    A->>D: Check user by email
+    D-->>A: User exists / not found
+
+    alt Email already exists
+        A-->>F: 409 Email already exists
+        F-->>U: Show register error
+    else Email available
+        A->>A: Hash password
+        A->>D: Create user
+        D-->>A: User created
+        A-->>F: 201 Register success {id, email, isTwoFactorEnabled}
+        F-->>U: Show account created
+    end
+
+    Note over U,C: 2. User starts 2FA setup
+    U->>F: Open 2FA setup
+    F->>A: POST /auth/2fa/init {userId}
+    A->>D: Find user by id
+    D-->>A: User found
+    A->>A: Generate TOTP secret
+    A->>A: Generate QR / manual key
+    A->>C: Save temporary secret with setupToken
+    C-->>A: Temporary secret stored
+    A-->>F: 200 {qrCodeDataUrl, manualEntryKey, setupToken}
+    F-->>U: Display QR code / manual key
+
+    Note over U,G: 3. User adds account in Google Authenticator
+    U->>G: Scan QR code or enter manual key
+    G-->>U: Generate 6-digit code
+
+    Note over U,D: 4. User confirms 2FA setup
+    U->>F: Enter 6-digit code
+    F->>A: POST /auth/2fa/confirm {userId, code, setupToken}
+    A->>D: Find user by id
+    D-->>A: User found
+    A->>C: Get temporary secret by setupToken
+    C-->>A: Secret found / not found
+
+    alt Setup session expired
+        A-->>F: 400 Setup session expired or not found
+        F-->>U: Show expired session message
+    else Secret found
+        A->>A: Verify code with temporary secret
+
+        alt Code is valid
+            A->>D: Save permanent 2FA secret
+            A->>D: Update isTwoFactorEnabled = true
+            D-->>A: 2FA enabled
+            A->>C: Delete temporary secret
+            C-->>A: Temporary secret removed
+            A-->>F: 200 Two-factor authentication enabled successfully
+            F-->>U: Show success message
+        else Code is invalid
+            A-->>F: 401 Invalid 2FA code
+            F-->>U: Show invalid code message
+        end
+    end
