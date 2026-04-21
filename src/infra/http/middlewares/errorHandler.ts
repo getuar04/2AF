@@ -5,7 +5,7 @@ export function errorHandler(
   error: unknown,
   _req: Request,
   res: Response,
-  _next: NextFunction
+  _next: NextFunction,
 ): void {
   if (error instanceof AppError) {
     res.status(error.statusCode).json({
@@ -17,7 +17,11 @@ export function errorHandler(
     return;
   }
 
-  console.error("Unhandled error:", error);
+  console.error("❌ Unhandled error:", error);
+
+  if (error instanceof Error) {
+    console.error("STACK:", error.stack);
+  }
 
   res.status(500).json({
     error: {
