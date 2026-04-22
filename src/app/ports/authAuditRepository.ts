@@ -11,6 +11,22 @@ export interface CreateAuditLogInput {
   createdAt: Date;
 }
 
+export interface AuditLogFilters {
+  email?: string;
+  action?: string;
+  status?: "SUCCESS" | "FAILED" | "INFO";
+  fromDate?: Date;
+  toDate?: Date;
+}
+
+export interface PaginatedAuditLogs {
+  data: AuditLog[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export interface AuthAuditRepository {
   create(input: CreateAuditLogInput): Promise<AuditLog>;
+  findAll(filters: AuditLogFilters, page: number, limit: number): Promise<PaginatedAuditLogs>;
 }

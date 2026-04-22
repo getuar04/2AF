@@ -22,6 +22,7 @@ export class MemoryUserRepository implements UserRepository {
       fullName: input.fullName,
       email: input.email,
       passwordHash: input.passwordHash,
+      role: input.role,
       isTwoFactorEnabled: false,
       createdAt: now,
       updatedAt: now

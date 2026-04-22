@@ -15,7 +15,8 @@ export class RegisterUser {
     private readonly passwordHasher: PasswordHasher,
     private readonly authAuditRepository: AuthAuditRepository,
     private readonly eventBus: EventBus,
-    private readonly idGenerator: IdGenerator
+    private readonly idGenerator: IdGenerator,
+    private readonly adminEmails: string[] = []
   ) {}
 
   async execute(input: RegisterUserInputDto): Promise<RegisterUserOutputDto> {
@@ -43,7 +44,15 @@ export class RegisterUser {
 
     const passwordHash = await this.passwordHasher.hash(password);
     const userId = this.idGenerator.generate();
-    const createdUser = await this.userRepository.create({ id: userId, fullName, email, passwordHash });
+    const role = this.adminEmails.includes(email) ? "admin" : "user";
+
+    const createdUser = await this.userRepository.create({
+      id: userId,
+      fullName,
+      email,
+      passwordHash,
+      role
+    });
 
     await this.authAuditRepository.create({
       id: this.idGenerator.generate(),
@@ -51,7 +60,7 @@ export class RegisterUser {
       email: createdUser.email,
       action: "REGISTER",
       status: "SUCCESS",
-      metadata: AuditService.buildMetadata({ fullName: createdUser.fullName }),
+      metadata: AuditService.buildMetadata({ fullName: createdUser.fullName, role }),
       createdAt: new Date()
     });
 
@@ -71,6 +80,7 @@ export class RegisterUser {
       id: createdUser.id,
       fullName: createdUser.fullName,
       email: createdUser.email,
+      role: createdUser.role,
       isTwoFactorEnabled: createdUser.isTwoFactorEnabled
     };
   }

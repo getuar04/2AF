@@ -2,10 +2,13 @@ import { EnableTwoFactor } from "./app/usecases/enableTwoFactor";
 import { LoginUser } from "./app/usecases/loginUser";
 import { RegisterUser } from "./app/usecases/registerUser";
 import { VerifyLoginTwoFactor } from "./app/usecases/verifyLoginTwoFactor";
+import { RefreshToken } from "./app/usecases/refreshToken";
+import { GetAuditLogs } from "./app/usecases/getAuditLogs";
 import { MemoryCacheProvider } from "./infra/cache/memoryCacheProvider";
 import { RedisCacheProvider } from "./infra/cache/redisCacheProvider";
 import { env } from "./infra/config/env";
 import { AuthController } from "./infra/http/controllers/authController";
+import { AdminController } from "./infra/http/controllers/adminController";
 import { KafkaEventBus } from "./infra/messaging/kafkaEventBus";
 import { NoopEventBus } from "./infra/messaging/noopEventBus";
 import { MemoryAuthAuditRepository } from "./infra/persistence/memory/memoryAuthAuditRepository";
@@ -20,19 +23,13 @@ import { UuidGenerator } from "./infra/utils/uuidGenerator";
 
 const memoryMode = env.app.runtimeMode === "memory";
 
-const userRepository = memoryMode
-  ? new MemoryUserRepository()
-  : new PostgresUserRepository();
+const userRepository = memoryMode ? new MemoryUserRepository() : new PostgresUserRepository();
 const passwordHasher = new BcryptPasswordHasher();
 const tokenProvider = new JwtTokenProvider();
 const twoFactorProvider = new SpeakeasyTwoFactorProvider();
 const qrCodeProvider = new QrCodeProvider();
-const cacheProvider = memoryMode
-  ? new MemoryCacheProvider()
-  : new RedisCacheProvider();
-const authAuditRepository = memoryMode
-  ? new MemoryAuthAuditRepository()
-  : new MongoAuthAuditRepository();
+const cacheProvider = memoryMode ? new MemoryCacheProvider() : new RedisCacheProvider();
+const authAuditRepository = memoryMode ? new MemoryAuthAuditRepository() : new MongoAuthAuditRepository();
 const eventBus = memoryMode ? new NoopEventBus() : new KafkaEventBus();
 const idGenerator = new UuidGenerator();
 
@@ -42,6 +39,7 @@ const registerUserUseCase = new RegisterUser(
   authAuditRepository,
   eventBus,
   idGenerator,
+  env.app.adminEmails
 );
 
 const enableTwoFactorUseCase = new EnableTwoFactor(
@@ -52,7 +50,7 @@ const enableTwoFactorUseCase = new EnableTwoFactor(
   authAuditRepository,
   eventBus,
   idGenerator,
-  env.security.twoFaExpiresSeconds,
+  env.security.twoFaExpiresSeconds
 );
 
 const loginUserUseCase = new LoginUser(
@@ -63,7 +61,7 @@ const loginUserUseCase = new LoginUser(
   authAuditRepository,
   eventBus,
   idGenerator,
-  env.security.twoFaExpiresSeconds, 
+  env.security.twoFaExpiresSeconds
 );
 
 const verifyLoginTwoFactorUseCase = new VerifyLoginTwoFactor(
@@ -73,12 +71,24 @@ const verifyLoginTwoFactorUseCase = new VerifyLoginTwoFactor(
   cacheProvider,
   authAuditRepository,
   eventBus,
-  idGenerator,
+  idGenerator
 );
+
+const refreshTokenUseCase = new RefreshToken(
+  tokenProvider,
+  userRepository,
+  authAuditRepository,
+  idGenerator
+);
+
+const getAuditLogsUseCase = new GetAuditLogs(authAuditRepository);
 
 export const authController = new AuthController(
   registerUserUseCase,
   enableTwoFactorUseCase,
   loginUserUseCase,
   verifyLoginTwoFactorUseCase,
+  refreshTokenUseCase
 );
+
+export const adminController = new AdminController(getAuditLogsUseCase);

@@ -5,6 +5,7 @@ export interface CreateUserInput {
   fullName: string;
   email: string;
   passwordHash: string;
+  role: "user" | "admin";
 }
 
 export interface EnableUserTwoFactorInput {

@@ -1,20 +1,12 @@
 import express from "express";
 import { env } from "./infra/config/env";
 import authRoutes from "./infra/http/routes/auth";
+import adminRoutes from "./infra/http/routes/admin";
 import { errorHandler } from "./infra/http/middlewares/errorHandler";
 import { connectRedis, disconnectRedis } from "./infra/cache/redisClient";
-import {
-  connectPostgres,
-  disconnectPostgres,
-} from "./infra/persistence/postgres/postgresClient";
-import {
-  disconnectMongo,
-  getMongoDatabase,
-} from "./infra/persistence/mongodb/mongoClient";
-import {
-  disconnectKafka,
-  getKafkaProducer,
-} from "./infra/messaging/kafkaClient";
+import { connectPostgres, disconnectPostgres } from "./infra/persistence/postgres/postgresClient";
+import { disconnectMongo, getMongoDatabase } from "./infra/persistence/mongodb/mongoClient";
+import { disconnectKafka, getKafkaProducer } from "./infra/messaging/kafkaClient";
 
 async function bootstrap(): Promise<void> {
   if (env.app.runtimeMode !== "memory") {
@@ -27,7 +19,6 @@ async function bootstrap(): Promise<void> {
         await getKafkaProducer();
       } catch (error) {
         console.error("Kafka connection failed during bootstrap:", error);
-
         if (env.app.nodeEnv === "production") {
           throw error;
         }
@@ -36,7 +27,6 @@ async function bootstrap(): Promise<void> {
   }
 
   const app = express();
-
   app.use(express.json());
 
   app.get("/health", (_req, res) => {
@@ -50,17 +40,15 @@ async function bootstrap(): Promise<void> {
   });
 
   app.use("/auth", authRoutes);
+  app.use("/admin", adminRoutes);
   app.use(errorHandler);
 
   const server = app.listen(env.app.port, () => {
-    console.log(
-      `Authentication Service running on port ${env.app.port} in ${env.app.runtimeMode} mode`,
-    );
+    console.log(`Authentication Service running on port ${env.app.port} in ${env.app.runtimeMode} mode`);
   });
 
   const shutdown = async (signal: string): Promise<void> => {
     console.log(`Received ${signal}. Shutting down gracefully...`);
-
     server.close(async () => {
       try {
         if (env.app.runtimeMode !== "memory") {
@@ -69,7 +57,6 @@ async function bootstrap(): Promise<void> {
           await disconnectRedis();
           await disconnectPostgres();
         }
-
         console.log("Shutdown completed successfully");
         process.exit(0);
       } catch (error) {
@@ -79,13 +66,8 @@ async function bootstrap(): Promise<void> {
     });
   };
 
-  process.on("SIGINT", () => {
-    void shutdown("SIGINT");
-  });
-
-  process.on("SIGTERM", () => {
-    void shutdown("SIGTERM");
-  });
+  process.on("SIGINT", () => { void shutdown("SIGINT"); });
+  process.on("SIGTERM", () => { void shutdown("SIGTERM"); });
 }
 
 bootstrap().catch((error) => {

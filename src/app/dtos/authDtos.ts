@@ -8,6 +8,7 @@ export interface RegisterUserOutputDto {
   id: string;
   fullName: string;
   email: string;
+  role: "user" | "admin";
   isTwoFactorEnabled: boolean;
 }
 
@@ -40,6 +41,7 @@ export interface LoginUserInputDto {
 export interface LoginUserSuccessOutputDto {
   status: "SUCCESS";
   accessToken: string;
+  refreshToken: string;
 }
 
 export interface LoginUserRequireTwoFactorOutputDto {
@@ -59,5 +61,14 @@ export interface VerifyLoginTwoFactorInputDto {
 }
 
 export interface VerifyLoginTwoFactorOutputDto {
+  accessToken: string;
+  refreshToken: string;
+}
+
+export interface RefreshTokenInputDto {
+  refreshToken: string;
+}
+
+export interface RefreshTokenOutputDto {
   accessToken: string;
 }

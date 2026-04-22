@@ -3,6 +3,7 @@ export interface User {
   fullName: string;
   email: string;
   passwordHash: string;
+  role: "user" | "admin";
   isTwoFactorEnabled: boolean;
   twoFactorSecret?: string;
   createdAt: Date;
@@ -24,5 +25,6 @@ export interface LoginChallenge {
   challengeId: string;
   userId: string;
   email: string;
+  role: "user" | "admin";
   createdAt: string;
 }

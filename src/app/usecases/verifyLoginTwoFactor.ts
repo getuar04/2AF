@@ -56,22 +56,28 @@ export class VerifyLoginTwoFactor {
       throw new AppError("Invalid 2FA code", 401, "INVALID_2FA_CODE");
     }
 
-    const accessToken = await this.tokenProvider.generateAccessToken({ userId: user.id, email: user.email });
+    const tokenPayload = { userId: user.id, email: user.email, role: challenge.role };
+    const accessToken = await this.tokenProvider.generateAccessToken(tokenPayload);
+    const refreshToken = await this.tokenProvider.generateRefreshToken(tokenPayload);
+
     await this.cacheProvider.delete(cacheKey);
+
     await this.authAuditRepository.create({
       id: this.idGenerator.generate(),
       userId: user.id,
       email: user.email,
       action: "VERIFY_LOGIN_2FA",
       status: "SUCCESS",
-      metadata: AuditService.buildMetadata({ viaTwoFactor: true, challengeId }),
+      metadata: AuditService.buildMetadata({ viaTwoFactor: true, challengeId, role: user.role }),
       createdAt: new Date()
     });
+
     const event: UserLoggedInEvent = {
       eventName: "user.logged_in",
       payload: { userId: user.id, email: user.email, loggedInAt: new Date().toISOString(), viaTwoFactor: true }
     };
     await this.eventBus.publish(event);
-    return { accessToken };
+
+    return { accessToken, refreshToken };
   }
 }

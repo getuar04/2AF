@@ -7,6 +7,7 @@ interface UserRow {
   full_name: string;
   email: string;
   password_hash: string;
+  role: "user" | "admin";
   is_two_factor_enabled: boolean;
   two_factor_secret: string | null;
   created_at: Date;
@@ -26,9 +27,9 @@ export class PostgresUserRepository implements UserRepository {
 
   async create(input: CreateUserInput): Promise<User> {
     const res = await getPostgresPool().query<UserRow>(
-      `INSERT INTO users (id, full_name, email, password_hash, is_two_factor_enabled, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,false,NOW(),NOW()) RETURNING *`,
-      [input.id, input.fullName, input.email, input.passwordHash]
+      `INSERT INTO users (id, full_name, email, password_hash, role, is_two_factor_enabled, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,false,NOW(),NOW()) RETURNING *`,
+      [input.id, input.fullName, input.email, input.passwordHash, input.role]
     );
     return this.map(res.rows[0]!);
   }
@@ -46,6 +47,7 @@ export class PostgresUserRepository implements UserRepository {
       fullName: row.full_name,
       email: row.email,
       passwordHash: row.password_hash,
+      role: row.role ?? "user",
       isTwoFactorEnabled: row.is_two_factor_enabled,
       twoFactorSecret: row.two_factor_secret ?? undefined,
       createdAt: new Date(row.created_at),

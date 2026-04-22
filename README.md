@@ -298,12 +298,113 @@ kubectl apply -f k8s/
 
 ---
 
+## 🔁 CI/CD me Jenkins
+
+Pipeline automatikisht ekzekutohet çdo herë që bën **push në GitHub**.
+
+### Hapat e njëhershëm (vetëm herën e parë)
+
+**1 — Nis Jenkins kontejnerin:**
+
+```powershell
+docker run -d --name jenkins --restart=on-failure -p 8080:8080 -p 50000:50000 -v jenkins_home:/var/jenkins_home -v /var/run/docker.sock:/var/run/docker.sock -u root jenkins/jenkins:lts-jdk17
+```
+
+**2 — Instalo Docker CLI dhe Node.js brenda Jenkins:**
+
+```powershell
+docker exec -u root jenkins bash -c "apt-get update && apt-get install -y docker.io"
+docker exec -u root jenkins bash -c "curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs"
+```
+
+**3 — Instalo kubectl brenda Jenkins:**
+
+```powershell
+docker exec -u root jenkins bash -c "curl -LO https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/kubectl"
+```
+
+**4 — Kopjo kubeconfig brenda Jenkins:**
+
+```powershell
+docker exec -u root jenkins mkdir -p /root/.kube
+docker cp "$env:USERPROFILE\.kube\config" jenkins:/root/.kube/config
+docker exec -u root jenkins sed -i 's/127.0.0.1/host.docker.internal/g' /root/.kube/config
+docker exec -u root jenkins bash -c "kubectl config set-cluster docker-desktop --insecure-skip-tls-verify=true"
+```
+
+**5 — Apliko secrets në Kubernetes (vetëm herën e parë):**
+
+```powershell
+kubectl apply -f k8s/secret.yaml
+```
+
+> ⚠️ `secret.yaml` nuk është në GitHub — duhet aplikuar manualisht!
+
+**6 — Konfiguro pipeline në Jenkins UI:**
+
+1. Shko te `http://localhost:8080`
+2. Krijo **New Item → Pipeline**
+3. Te **Pipeline → Definition** zgjidh `Pipeline script from SCM`
+4. **SCM:** Git
+5. **Repository URL:** `https://github.com/getuar04/2AF.git`
+6. **Branch:** `*/main`
+7. **Script Path:** `Jenkinsfile`
+8. Kliko **Save**
+
+---
+
+### Si funksionon pipeline-i
+
+Çdo herë që bën `git push origin main`, Jenkins automatikisht:
+
+```
+✅ Checkout      — merr kodin nga GitHub
+✅ npm install   — instalo dependencies
+✅ npm test      — ekzekuto të gjitha testet
+✅ docker pull   — pre-pull base image
+✅ docker build  — build image të re me tag build-N
+✅ kubectl apply — deploy në Kubernetes
+✅ rollout       — prit derisa deployment të përfundojë
+```
+
+---
+
+### Trigger manual
+
+Nëse dëshiron ta ekzekutosh pa push:
+
+1. Shko te `http://localhost:8080`
+2. Kliko pipeline **2AF-Pipeline**
+3. Kliko **Build Now**
+
+---
+
+### Shiko rezultatin
+
+```powershell
+# Shiko nëse Jenkins po punon
+docker ps | findstr jenkins
+
+# Shiko logjet e Jenkins
+docker logs jenkins --tail 50
+```
+
+Ose shko te `http://localhost:8080` → **2AF-Pipeline** → **Console Output**
+
+---
+
 ## ⚠️ Probleme të zakonshme
 
-| Problem                           | Zgjidhja                                                                  |
-| --------------------------------- | ------------------------------------------------------------------------- |
-| Pod në `ImagePullBackOff`         | Ri-build image-in: `docker build -t 2af-auth-service:latest .`            |
-| `relation "users" does not exist` | Ekzekuto SQL-in e Hapi 3                                                  |
-| Port-forward nuk funksionon       | Kontrollo nëse porta 30500 është e lirë: `netstat -ano \| findstr :30500` |
-| Pods në `Pending`                 | Prit 2-3 minuta ose kontrollo: `kubectl describe pod -n auth-service`     |
-| Të dhënat fshihen pas restart     | Apliko PersistentVolume në `k8s/postgres.yaml`                            |
+| Problem                                  | Zgjidhja                                                                                      |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Pod në `ImagePullBackOff`                | Ri-build image-in: `docker build -t 2af-auth-service:latest .`                                |
+| `relation "users" does not exist`        | Ekzekuto SQL-in e Hapi 3                                                                      |
+| Port-forward nuk funksionon              | Kontrollo nëse porta 30500 është e lirë: `netstat -ano \| findstr :30500`                     |
+| Pods në `Pending`                        | Prit 2-3 minuta ose kontrollo: `kubectl describe pod -n auth-service`                         |
+| Të dhënat fshihen pas restart            | Apliko PersistentVolume në `k8s/postgres.yaml`                                                |
+| Jenkins: `permission denied docker.sock` | Sigurohu që ke `-v /var/run/docker.sock:/var/run/docker.sock` në docker run                   |
+| Jenkins: `npm not found`                 | Ekzekuto Hapin 2 të seksionit CI/CD për të instaluar Node.js                                  |
+| Jenkins: `kubectl connection refused`    | Ri-ekzekuto Hapin 4 të seksionit CI/CD për kubeconfig                                         |
+| Jenkins: `secret.yaml does not exist`    | Ekzekuto `kubectl apply -f k8s/secret.yaml` manualisht                                        |
+| Jenkins: `fatal: not in a git directory` | Fshi workspace: `docker exec -u root jenkins rm -rf /var/jenkins_home/workspace/2AF-Pipeline` |
+2

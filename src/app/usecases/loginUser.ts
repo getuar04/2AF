@@ -49,6 +49,7 @@ export class LoginUser {
         challengeId,
         userId: user.id,
         email: user.email,
+        role: user.role,
         createdAt: new Date().toISOString()
       });
       await this.cacheProvider.set(cacheKey, serialized, { ttlSeconds: this.loginChallengeTtlSeconds });
@@ -61,21 +62,26 @@ export class LoginUser {
       };
     }
 
-    const accessToken = await this.tokenProvider.generateAccessToken({ userId: user.id, email: user.email });
+    const tokenPayload = { userId: user.id, email: user.email, role: user.role };
+    const accessToken = await this.tokenProvider.generateAccessToken(tokenPayload);
+    const refreshToken = await this.tokenProvider.generateRefreshToken(tokenPayload);
+
     await this.authAuditRepository.create({
       id: this.idGenerator.generate(),
       userId: user.id,
       email: user.email,
       action: "LOGIN",
       status: "SUCCESS",
-      metadata: AuditService.buildMetadata({ viaTwoFactor: false }),
+      metadata: AuditService.buildMetadata({ viaTwoFactor: false, role: user.role }),
       createdAt: new Date()
     });
+
     const event: UserLoggedInEvent = {
       eventName: "user.logged_in",
       payload: { userId: user.id, email: user.email, loggedInAt: new Date().toISOString(), viaTwoFactor: false }
     };
     await this.eventBus.publish(event);
-    return { status: "SUCCESS", accessToken };
+
+    return { status: "SUCCESS", accessToken, refreshToken };
   }
 }

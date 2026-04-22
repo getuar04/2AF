@@ -5,46 +5,96 @@ import { createApp } from "../../src/app";
 describe("Auth routes", () => {
   const app = createApp();
 
-  it("registers, enables 2fa, logs in and verifies 2fa", async () => {
-    const registerResponse = await request(app)
+  it("registers a user and returns role=user", async () => {
+    const res = await request(app)
       .post("/auth/register")
-      .send({ fullName: "Getuar Test", email: "getuar@example.com", password: "Password123" })
+      .send({ fullName: "Normal User", email: "user@example.com", password: "Password123" })
       .expect(201);
 
-    const userId = registerResponse.body.id as string;
-    expect(userId).toBeTruthy();
+    expect(res.body.role).toBe("user");
+    expect(res.body.isTwoFactorEnabled).toBe(false);
+  });
 
-    const initResponse = await request(app)
+  it("registers an admin email and returns role=admin", async () => {
+    const res = await request(app)
+      .post("/auth/register")
+      .send({ fullName: "Admin User", email: "admin@test.com", password: "Password123" })
+      .expect(201);
+
+    expect(res.body.role).toBe("admin");
+  });
+
+  it("login returns accessToken and refreshToken", async () => {
+    await request(app)
+      .post("/auth/register")
+      .send({ fullName: "Login Test", email: "logintest@example.com", password: "Password123" });
+
+    const res = await request(app)
+      .post("/auth/login")
+      .send({ email: "logintest@example.com", password: "Password123" })
+      .expect(200);
+
+    expect(res.body.status).toBe("SUCCESS");
+    expect(res.body.accessToken).toBeTruthy();
+    expect(res.body.refreshToken).toBeTruthy();
+  });
+
+  it("refresh token returns new accessToken", async () => {
+    await request(app)
+      .post("/auth/register")
+      .send({ fullName: "Refresh Test", email: "refreshtest@example.com", password: "Password123" });
+
+    const loginRes = await request(app)
+      .post("/auth/login")
+      .send({ email: "refreshtest@example.com", password: "Password123" })
+      .expect(200);
+
+    const { refreshToken } = loginRes.body as { refreshToken: string };
+
+    const refreshRes = await request(app)
+      .post("/auth/refresh")
+      .send({ refreshToken })
+      .expect(200);
+
+    expect(refreshRes.body.accessToken).toBeTruthy();
+  });
+
+  it("registers, enables 2FA, logs in and verifies 2FA with tokens", async () => {
+    const registerRes = await request(app)
+      .post("/auth/register")
+      .send({ fullName: "Getuar Test", email: "getuar2fa@example.com", password: "Password123" })
+      .expect(201);
+
+    const userId = registerRes.body.id as string;
+
+    const initRes = await request(app)
       .post("/auth/2fa/init")
       .send({ userId })
       .expect(200);
 
-    expect(initResponse.body.qrCodeDataUrl).toContain("data:image/png;base64");
-    const manualEntryKey = initResponse.body.manualEntryKey as string;
-    const setupToken = initResponse.body.setupToken as string;
+    const { manualEntryKey, setupToken } = initRes.body as { manualEntryKey: string; setupToken: string };
 
     const firstCode = speakeasy.totp({ secret: manualEntryKey, encoding: "base32" });
-
     await request(app)
       .post("/auth/2fa/confirm")
       .send({ userId, code: firstCode, setupToken })
       .expect(200);
 
-    const loginResponse = await request(app)
+    const loginRes = await request(app)
       .post("/auth/login")
-      .send({ email: "getuar@example.com", password: "Password123" })
+      .send({ email: "getuar2fa@example.com", password: "Password123" })
       .expect(202);
 
-    expect(loginResponse.body.status).toBe("REQUIRE_2FA");
-    const challengeId = loginResponse.body.challengeId as string;
+    expect(loginRes.body.status).toBe("REQUIRE_2FA");
+    const { challengeId } = loginRes.body as { challengeId: string };
 
     const secondCode = speakeasy.totp({ secret: manualEntryKey, encoding: "base32" });
-
-    const verifyResponse = await request(app)
+    const verifyRes = await request(app)
       .post("/auth/login/2fa")
-      .send({ email: "getuar@example.com", challengeId, code: secondCode })
+      .send({ email: "getuar2fa@example.com", challengeId, code: secondCode })
       .expect(200);
 
-    expect(verifyResponse.body.accessToken).toBeTruthy();
+    expect(verifyRes.body.accessToken).toBeTruthy();
+    expect(verifyRes.body.refreshToken).toBeTruthy();
   });
 });

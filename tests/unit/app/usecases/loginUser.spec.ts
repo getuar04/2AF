@@ -22,6 +22,8 @@ describe("LoginUser", () => {
 
   const mockTokenProvider: jest.Mocked<TokenProvider> = {
     generateAccessToken: jest.fn(),
+    generateRefreshToken: jest.fn(),
+    verifyRefreshToken: jest.fn(),
   };
 
   const mockCacheProvider: jest.Mocked<CacheProvider> = {
@@ -32,6 +34,7 @@ describe("LoginUser", () => {
 
   const mockAuditRepository: jest.Mocked<AuthAuditRepository> = {
     create: jest.fn(),
+    findAll: jest.fn(),
   };
 
   const mockEventBus: jest.Mocked<EventBus> = {
@@ -46,55 +49,42 @@ describe("LoginUser", () => {
     jest.clearAllMocks();
   });
 
-  it("should return token when 2FA is disabled", async () => {
+  it("should return accessToken and refreshToken when 2FA is disabled", async () => {
     mockUserRepository.findByEmail.mockResolvedValue({
       id: "user-1",
       fullName: "Getuar",
-      email: "getaur@test.ts",
+      email: "getuar@test.ts",
       passwordHash: "hashed-password",
+      role: "user",
       isTwoFactorEnabled: false,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
     mockPasswordHasher.compare.mockResolvedValue(true);
-    mockTokenProvider.generateAccessToken.mockResolvedValue("jwt-token");
+    mockTokenProvider.generateAccessToken.mockResolvedValue("access-jwt");
+    mockTokenProvider.generateRefreshToken.mockResolvedValue("refresh-jwt");
     mockIdGenerator.generate.mockReturnValue("audit-id");
 
     const useCase = new LoginUser(
-      mockUserRepository,
-      mockPasswordHasher,
-      mockTokenProvider,
-      mockCacheProvider,
-      mockAuditRepository,
-      mockEventBus,
-      mockIdGenerator,
-      300, 
+      mockUserRepository, mockPasswordHasher, mockTokenProvider,
+      mockCacheProvider, mockAuditRepository, mockEventBus, mockIdGenerator, 300
     );
 
-    const result = await useCase.execute({
-      email: "getaur@test.ts",
-      password: "12345678",
-    });
+    const result = await useCase.execute({ email: "getuar@test.ts", password: "12345678" });
 
-    expect(result).toEqual({
-      status: "SUCCESS",
-      accessToken: "jwt-token",
-    });
-
-    expect(mockEventBus.publish).toHaveBeenCalledWith(
-      expect.objectContaining({
-        eventName: "user.logged_in",
-      }),
-    );
+    expect(result).toEqual({ status: "SUCCESS", accessToken: "access-jwt", refreshToken: "refresh-jwt" });
+    expect(mockTokenProvider.generateRefreshToken).toHaveBeenCalled();
+    expect(mockEventBus.publish).toHaveBeenCalledWith(expect.objectContaining({ eventName: "user.logged_in" }));
   });
 
   it("should require 2FA when enabled", async () => {
     mockUserRepository.findByEmail.mockResolvedValue({
       id: "user-1",
       fullName: "Getuar",
-      email: "getaur@test.ts",
+      email: "getuar@test.ts",
       passwordHash: "hashed-password",
+      role: "user",
       isTwoFactorEnabled: true,
       twoFactorSecret: "SECRET",
       createdAt: new Date(),
@@ -102,34 +92,22 @@ describe("LoginUser", () => {
     });
 
     mockPasswordHasher.compare.mockResolvedValue(true);
-    mockIdGenerator.generate
-      .mockReturnValueOnce("challenge-id")
-      .mockReturnValueOnce("audit-id");
+    mockIdGenerator.generate.mockReturnValueOnce("challenge-id").mockReturnValueOnce("audit-id");
 
     const useCase = new LoginUser(
-      mockUserRepository,
-      mockPasswordHasher,
-      mockTokenProvider,
-      mockCacheProvider,
-      mockAuditRepository,
-      mockEventBus,
-      mockIdGenerator,
-      300,
+      mockUserRepository, mockPasswordHasher, mockTokenProvider,
+      mockCacheProvider, mockAuditRepository, mockEventBus, mockIdGenerator, 300
     );
 
-    const result = await useCase.execute({
-      email: "getaur@test.ts",
-      password: "12345678",
-    });
+    const result = await useCase.execute({ email: "getuar@test.ts", password: "12345678" });
 
     expect(result).toEqual({
       status: "REQUIRE_2FA",
       challengeId: "challenge-id",
       userId: "user-1",
-      email: "getaur@test.ts",
+      email: "getuar@test.ts",
       message: "Two-factor authentication is required",
     });
-
     expect(mockCacheProvider.set).toHaveBeenCalled();
   });
 });
