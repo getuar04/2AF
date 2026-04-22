@@ -13,6 +13,31 @@ spec:
       labels:
         app: auth-service
     spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox
+          command:
+            [
+              "/bin/sh",
+              "-c",
+              "until nc -z postgres-service 5432; do sleep 2; done",
+            ]
+        - name: wait-for-redis
+          image: busybox
+          command:
+            [
+              "/bin/sh",
+              "-c",
+              "until nc -z redis-service 6379; do sleep 2; done",
+            ]
+        - name: wait-for-mongodb
+          image: busybox
+          command:
+            [
+              "/bin/sh",
+              "-c",
+              "until nc -z mongodb-service 27017; do sleep 2; done",
+            ]
       containers:
         - name: auth-service
           image: 2af-auth-service:latest
