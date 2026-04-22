@@ -94,7 +94,3 @@ export const authController = new AuthController(
 export const adminController = new AdminController(getAuditLogsUseCase, cacheProvider);
 
 export { authAuditRepository, cacheProvider };
-
-export { authAuditRepository, cacheProvider };
-
-export { authAuditRepository, cacheProvider };
