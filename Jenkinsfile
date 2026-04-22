@@ -50,7 +50,6 @@ pipeline {
     stage('Deploy to Kubernetes') {
       steps {
         sh 'kubectl apply -f k8s/namespace.yaml'
-        sh 'kubectl apply -f k8s/secret.yaml'
         sh 'kubectl apply -f k8s/configmap.yaml'
         sh 'kubectl apply -f k8s/postgres.yaml'
         sh 'kubectl apply -f k8s/redis.yaml'
