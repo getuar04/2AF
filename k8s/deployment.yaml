@@ -26,7 +26,7 @@ spec:
       containers:
         - name: auth-service
           image: 2af-auth-service:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5000
           envFrom:

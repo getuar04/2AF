@@ -91,4 +91,10 @@ export const authController = new AuthController(
   refreshTokenUseCase
 );
 
-export const adminController = new AdminController(getAuditLogsUseCase);
+export const adminController = new AdminController(getAuditLogsUseCase, cacheProvider);
+
+export { authAuditRepository, cacheProvider };
+
+export { authAuditRepository, cacheProvider };
+
+export { authAuditRepository, cacheProvider };
