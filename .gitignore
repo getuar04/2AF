@@ -1,11 +1,32 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+
+# Test coverage
 coverage/
+
+# Environment variables - KURRË në Git!
 .env
+.env.local
+.env.production
+.env.staging
+
+# Kubernetes secrets - KURRË në Git!
+k8s/secret.yaml
+k8s/secret.*.yaml
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
 .vscode/
 .idea/
-*.log
+*.swp
+*.swo
 
-
-# Kubernetes secrets
-k8s/secret.yaml
+# OS
+.DS_Store
+Thumbs.db

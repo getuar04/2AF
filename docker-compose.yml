@@ -1,10 +1,32 @@
-version: "3.9"
-
 services:
+  migration:
+    image: postgres:16-alpine
+    container_name: auth-migration
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    command: >
+      psql -h postgres -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-2af} -c
+      "CREATE TABLE IF NOT EXISTS users (
+        id VARCHAR(36) PRIMARY KEY,
+        full_name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        role VARCHAR(20) NOT NULL DEFAULT 'user',
+        is_two_factor_enabled BOOLEAN DEFAULT false,
+        two_factor_secret VARCHAR(255),
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );"
+    restart: "no"
+
   auth-service:
     build:
       context: .
       dockerfile: Dockerfile
+      target: production
     container_name: auth-service
     depends_on:
       postgres:
@@ -15,47 +37,47 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    env_file:
+      - .env
     environment:
-      NODE_ENV: development
-      PORT: 5000
+      NODE_ENV: production
       APP_RUNTIME_MODE: production
-      INTERNAL_API_KEY: local-internal-key
-
-      JWT_SECRET: supersecret
-      JWT_EXPIRES_IN: 1h
-
-      REDIS_URL: redis://redis:6379
-
       KAFKA_ENABLED: "true"
       KAFKA_BROKERS: kafka:9092
-      KAFKA_CLIENT_ID: authentication-service
-      KAFKA_AUTH_TOPIC: auth.events
-
-      POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/2af
-
+      KAFKAJS_NO_PARTITIONER_WARNING: "1"
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      POSTGRES_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-2af}
       MONGODB_URL: mongodb://mongodb:27017
-      MONGODB_DB_NAME: authentication_service
-      MONGODB_AUDIT_COLLECTION: auth_audit_logs
-
-      TWO_FA_EXPIRES_SECONDS: 300
     ports:
       - "5000:5000"
-    restart: unless-stopped
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   postgres:
     image: postgres:16-alpine
     container_name: auth-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: 2af
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-2af}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d 2af"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-2af}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -63,13 +85,17 @@ services:
   redis:
     image: redis:7-alpine
     container_name: auth-redis
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      --appendonly yes
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -94,11 +120,13 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - "2181:2181"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo ruok > /dev/tcp/localhost/2181' 2>/dev/null && echo ok || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'echo ruok > /dev/tcp/localhost/2181' 2>/dev/null && echo ok || exit 1",
+        ]
       interval: 10s
       timeout: 10s
       retries: 10
@@ -123,7 +151,11 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      test:
+        [
+          "CMD-SHELL",
+          "kafka-broker-api-versions --bootstrap-server localhost:9092",
+        ]
       interval: 10s
       timeout: 15s
       retries: 20

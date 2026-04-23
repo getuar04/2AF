@@ -6,22 +6,28 @@ sequenceDiagram
     participant A as Auth Service
     participant D as User Database
     participant C as Cache
+    participant M as MongoDB Audit
+    participant K as Kafka
     participant G as Google Authenticator App
 
-    Note over U,D: 1. User registers account
+    Note over U,K: 1. User registers account
     U->>F: Fill register form
     F->>A: POST /auth/register {fullName, email, password}
     A->>D: Check user by email
     D-->>A: User exists / not found
 
     alt Email already exists
+        A->>M: Log REGISTER FAILED {email, reason: EMAIL_ALREADY_EXISTS}
         A-->>F: 409 Email already exists
         F-->>U: Show register error
     else Email available
         A->>A: Hash password
-        A->>D: Create user
+        A->>A: Assign role (admin if in ADMIN_EMAILS, else user)
+        A->>D: Create user {id, fullName, email, passwordHash, role}
         D-->>A: User created
-        A-->>F: 201 Register success {id, email, isTwoFactorEnabled}
+        A->>M: Log REGISTER SUCCESS {userId, email, role}
+        A->>K: Publish user.registered event
+        A-->>F: 201 {id, fullName, email, role, isTwoFactorEnabled}
         F-->>U: Show account created
     end
 
@@ -32,8 +38,10 @@ sequenceDiagram
     D-->>A: User found
     A->>A: Generate TOTP secret
     A->>A: Generate QR / manual key
-    A->>C: Save temporary secret with setupToken
+    A->>A: Generate setupToken
+    A->>C: Save temporary secret (key: auth:2fa:setup:{userId}:{setupToken}, TTL: 300s)
     C-->>A: Temporary secret stored
+    A->>M: Log ENABLE_2FA_INIT INFO {userId, setupToken}
     A-->>F: 200 {qrCodeDataUrl, manualEntryKey, setupToken}
     F-->>U: Display QR code / manual key
 
@@ -61,6 +69,8 @@ sequenceDiagram
             D-->>A: 2FA enabled
             A->>C: Delete temporary secret
             C-->>A: Temporary secret removed
+            A->>M: Log ENABLE_2FA_CONFIRM SUCCESS {userId}
+            A->>K: Publish user.two_factor_enabled event
             A-->>F: 200 Two-factor authentication enabled successfully
             F-->>U: Show success message
         else Code is invalid
@@ -68,3 +78,112 @@ sequenceDiagram
             F-->>U: Show invalid code message
         end
     end
+
+    Note over U,K: 5. User login (without 2FA)
+    U->>F: Fill login form
+    F->>A: POST /auth/login {email, password}
+    A->>D: Find user by email
+    D-->>A: User found / not found
+
+    alt Invalid credentials
+        A-->>F: 401 Invalid credentials
+        F-->>U: Show login error
+    else Valid credentials - 2FA disabled
+        A->>A: Generate accessToken (15m) + refreshToken (7d)
+        A->>M: Log LOGIN SUCCESS {userId, email, role, viaTwoFactor: false}
+        A->>K: Publish user.logged_in event
+        A-->>F: 200 {status: SUCCESS, accessToken, refreshToken}
+        F-->>U: Show dashboard
+    else Valid credentials - 2FA enabled
+        A->>A: Generate challengeId
+        A->>C: Save challenge (key: auth:login:challenge:{challengeId}, TTL: 300s)
+        C-->>A: Challenge stored
+        A-->>F: 202 {status: REQUIRE_2FA, challengeId, userId, email}
+        F-->>U: Show 2FA code input
+    end
+
+    Note over U,G: 6. User gets 2FA code from Google Authenticator
+    U->>G: Open app
+    G-->>U: Generate 6-digit code
+
+    Note over U,K: 7. User verifies 2FA login
+    U->>F: Enter 6-digit code
+    F->>A: POST /auth/login/2fa {email, challengeId, code}
+    A->>C: Get challenge by challengeId
+    C-->>A: Challenge found / not found
+
+    alt Challenge expired
+        A-->>F: 400 Login challenge expired or not found
+        F-->>U: Show expired challenge message
+    else Challenge found
+        A->>D: Find user by email
+        D-->>A: User found
+        A->>A: Verify 2FA code with permanent secret
+
+        alt Code is valid
+            A->>A: Generate accessToken (15m) + refreshToken (7d)
+            A->>C: Delete challenge
+            C-->>A: Challenge removed
+            A->>M: Log VERIFY_LOGIN_2FA SUCCESS {userId, email, role, challengeId}
+            A->>K: Publish user.logged_in event
+            A-->>F: 200 {accessToken, refreshToken}
+            F-->>U: Show dashboard
+        else Code is invalid
+            A-->>F: 401 Invalid 2FA code
+            F-->>U: Show invalid code message
+        end
+    end
+
+    Note over U,A: 8. User refreshes access token
+    U->>F: accessToken expired
+    F->>A: POST /auth/refresh {refreshToken}
+    A->>A: Verify refreshToken signature
+    A->>D: Find user by id
+
+    alt Invalid or expired refreshToken
+        A-->>F: 401 Invalid or expired refresh token
+        F-->>U: Redirect to login
+    else Valid refreshToken
+        A->>A: Generate new accessToken (15m)
+        A->>M: Log REFRESH_TOKEN SUCCESS {userId, email, role}
+        A-->>F: 200 {accessToken}
+        F-->>U: Continue session
+    end
+
+    Note over U,M: 9. Admin monitors audit logs
+    U->>F: Open admin dashboard
+    F->>A: GET /admin/audit-logs?page=1&limit=20 {Authorization: Bearer accessToken}
+    A->>A: Verify accessToken + check role === admin
+
+    alt Not authenticated
+        A-->>F: 401 Missing or invalid authorization header
+        F-->>U: Redirect to login
+    else Authenticated but not admin
+        A-->>F: 403 Admin access required
+        F-->>U: Show forbidden error
+    else Admin authenticated
+        A->>M: Query audit logs with filters
+        M-->>A: Paginated audit logs
+        A-->>F: 200 {items, total, page, limit}
+        F-->>U: Display audit logs table
+    end
+
+    Note over U,C: 10. Admin debugs Redis cache
+    U->>F: Open debug tools
+    F->>A: GET /admin/debug/redis/health {Authorization: Bearer accessToken}
+    A->>C: Ping Redis
+    C-->>A: Pong
+    A-->>F: 200 {status: ok, connected: true}
+    F-->>U: Show Redis status
+
+    F->>A: GET /admin/debug/login-challenge/{challengeId} {Authorization: Bearer accessToken}
+    A->>C: Check key exists + get TTL
+    C-->>A: exists + ttlSeconds
+    A-->>F: 200 {type, key, exists, ttlSeconds}
+    F-->>U: Show challenge debug info
+
+    F->>A: GET /admin/debug/2fa-setup/{userId}/{setupToken} {Authorization: Bearer accessToken}
+    A->>C: Check key exists + get TTL
+    C-->>A: exists + ttlSeconds
+    A-->>F: 200 {type, key, exists, ttlSeconds}
+    F-->>U: Show 2FA setup debug info
