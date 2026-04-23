@@ -100,7 +100,7 @@ pipeline {
         """
         sh """
           kubectl rollout status deployment/auth-service \\
-            -n ${K8S_NAMESPACE} --timeout=180s
+            -n ${K8S_NAMESPACE} --timeout=300s
         """
       }
     }
