@@ -94,14 +94,15 @@ pipeline {
         sh "kubectl apply -f k8s/deployment.yaml"
 
         sh """
-          kubectl set image deployment/auth-service \\
-            auth-service=${FULL_IMAGE}:${IMAGE_TAG} \\
-            -n ${K8S_NAMESPACE}
-        """
-        sh """
-          kubectl rollout status deployment/auth-service \\
-            -n ${K8S_NAMESPACE} --timeout=300s
-        """
+  kubectl set image deployment/auth-service \
+    auth-service=${FULL_IMAGE}:${IMAGE_TAG} \
+    -n ${K8S_NAMESPACE}
+"""
+sh "kubectl rollout restart deployment/auth-service -n ${K8S_NAMESPACE}"
+sh """
+  kubectl rollout status deployment/auth-service \
+    -n ${K8S_NAMESPACE} --timeout=300s
+"""
       }
     }
 
