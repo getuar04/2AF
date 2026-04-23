@@ -4,7 +4,7 @@ pipeline {
   environment {
     IMAGE_NAME    = '2af-auth-service'
     IMAGE_TAG     = "build-${BUILD_NUMBER}"
-    REGISTRY      = 'your-dockerhub-username'
+    REGISTRY = 'getu13'
     FULL_IMAGE    = "${REGISTRY}/${IMAGE_NAME}"
     K8S_NAMESPACE = 'auth-service'
     REPO_URL      = 'https://github.com/getuar04/2AF.git'
