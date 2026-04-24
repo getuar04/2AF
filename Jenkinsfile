@@ -20,7 +20,6 @@ pipeline {
 
     stage('Checkout') {
       steps {
-        // FIX 1: checkout i thjeshtë — nuk fshin package-lock.json
         checkout([
           $class: 'GitSCM',
           branches: [[name: '*/main']],
@@ -33,15 +32,12 @@ pipeline {
     stage('Setup Kubeconfig') {
       steps {
         script {
-          // FIX 2: double quotes për të zgjeruar ${WORKSPACE}
-          sh "mkdir -p '${WORKSPACE}/.kube'"
-          sh "cp /var/jenkins_home/.kube/config '${WORKSPACE}/.kube/config'"
+          sh "mkdir -p ${WORKSPACE}/.kube"
+          sh "cp /var/jenkins_home/.kube/config ${WORKSPACE}/.kube/config"
 
           sh """
-            sed -i 's|https://127.0.0.1|https://host.docker.internal|g' \
-              '${WORKSPACE}/.kube/config'
-            sed -i 's|https://localhost|https://host.docker.internal|g' \
-              '${WORKSPACE}/.kube/config'
+            sed -i 's|https://127.0.0.1|https://host.docker.internal|g' ${WORKSPACE}/.kube/config
+            sed -i 's|https://localhost|https://host.docker.internal|g' ${WORKSPACE}/.kube/config
           """
 
           sh """
@@ -65,7 +61,7 @@ print("Kubeconfig modified successfully")
 PYEOF
           """
 
-          sh "kubectl cluster-info --kubeconfig '${WORKSPACE}/.kube/config'"
+          sh "kubectl cluster-info --kubeconfig ${WORKSPACE}/.kube/config"
           echo "kubectl is connected to Kubernetes"
         }
       }
@@ -74,21 +70,13 @@ PYEOF
     stage('Verify Secrets') {
       steps {
         script {
-          // FIX 3: double quotes për të zgjeruar variablat
           def secretExists = sh(
-            script: """
-              kubectl get secret auth-secrets \
-                -n ${K8S_NAMESPACE} \
-                --kubeconfig '${WORKSPACE}/.kube/config' \
-                > /dev/null 2>&1
-            """,
+            script: "kubectl get secret auth-secrets -n ${K8S_NAMESPACE} --kubeconfig ${WORKSPACE}/.kube/config > /dev/null 2>&1",
             returnStatus: true
           )
-
           if (secretExists != 0) {
-            error("SEKRET MUNGON: auth-secrets not found in namespace ${K8S_NAMESPACE}. Krijo manualisht në host.")
+            error("SEKRET MUNGON: auth-secrets not found in namespace ${K8S_NAMESPACE}.")
           }
-
           echo "Secret auth-secrets exists in namespace ${K8S_NAMESPACE}"
         }
       }
@@ -99,11 +87,11 @@ PYEOF
         script {
           sh """
             docker run --rm \
-              -v '${WORKSPACE}:/app' \
+              -v ${WORKSPACE}:/app \
               -w /app \
               --network host \
               node:20-alpine \
-              sh -c "npm ci --prefer-offline --no-audit && npm run lint:types"
+              sh -c 'npm ci --prefer-offline --no-audit && npm run lint:types'
           """
         }
       }
@@ -114,11 +102,11 @@ PYEOF
         script {
           sh """
             docker run --rm \
-              -v '${WORKSPACE}:/app' \
+              -v ${WORKSPACE}:/app \
               -w /app \
               --network host \
               node:20-alpine \
-              sh -c "npm ci --prefer-offline --no-audit && npm test -- --runInBand --forceExit"
+              sh -c 'npm ci --prefer-offline --no-audit && npm test -- --runInBand --forceExit'
           """
         }
       }
@@ -175,7 +163,7 @@ PYEOF
     stage('Deploy to Kubernetes') {
       steps {
         script {
-          def kube = "--kubeconfig '${WORKSPACE}/.kube/config'"
+          def kube = "--kubeconfig ${WORKSPACE}/.kube/config"
 
           sh "kubectl apply -f k8s/namespace.yaml ${kube}"
           sh "kubectl apply -f k8s/configmap.yaml ${kube}"
@@ -189,7 +177,7 @@ PYEOF
           sh """
             kubectl patch deployment auth-service \
               -n ${K8S_NAMESPACE} ${kube} \
-              --type='json' \
+              --type=json \
               -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"}]'
           """
 
@@ -214,20 +202,15 @@ PYEOF
     stage('Run DB Migration') {
       steps {
         script {
-          def kube = "--kubeconfig '${WORKSPACE}/.kube/config'"
-
+          def kube = "--kubeconfig ${WORKSPACE}/.kube/config"
           def migrationExists = sh(
             script: 'test -f k8s/migration.yaml',
             returnStatus: true
           )
-
           if (migrationExists == 0) {
             sh "kubectl delete job db-migration -n ${K8S_NAMESPACE} ${kube} --ignore-not-found=true"
             sh "kubectl apply -f k8s/migration.yaml -n ${K8S_NAMESPACE} ${kube}"
-            sh """
-              kubectl wait --for=condition=complete job/db-migration \
-                -n ${K8S_NAMESPACE} ${kube} --timeout=120s
-            """
+            sh "kubectl wait --for=condition=complete job/db-migration -n ${K8S_NAMESPACE} ${kube} --timeout=120s"
             echo "DB migration executed successfully"
           } else {
             echo "k8s/migration.yaml does not exist - migration step skipped"
