@@ -25,8 +25,7 @@ pipeline {
           branches: [[name: '*/main']],
           userRemoteConfigs: [[url: "${REPO_URL}"]],
           extensions: [
-            [$class: 'CleanBeforeCheckout'],
-            [$class: 'CleanCheckout']
+            [$class: 'CleanBeforeCheckout']
           ]
         ])
         echo "Checkout successful - commit: ${env.GIT_COMMIT?.take(8) ?: 'N/A'}"
