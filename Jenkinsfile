@@ -48,7 +48,7 @@ pipeline {
           '''
 
 
-          sh '''
+          sh """
             python3 - <<'PYEOF'
 import yaml, sys
 
@@ -65,9 +65,9 @@ for cluster_entry in cfg.get("clusters", []):
 with open("${WORKSPACE}/.kube/config", "w") as f:
     yaml.dump(cfg, f, default_flow_style=False)
 
-print("Kubeconfig modified: host.docker.internal + insecure-skip-tls-verify")
+print("Kubeconfig modified successfully")
 PYEOF
-          '''
+          """
 
           sh 'kubectl cluster-info --kubeconfig "${WORKSPACE}/.kube/config"'
           echo "kubectl is connected to Kubernetes"
