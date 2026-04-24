@@ -83,39 +83,39 @@ PYEOF
     }
 
     stage('Lint & Type Check') {
-      steps {
-        script {
-          sh """
-            docker run --rm \
-              -v ${WORKSPACE}:/app \
-              -w /app \
-              --network host \
-              node:20-alpine \
-              sh -c 'npm ci --prefer-offline --no-audit && npm run lint:types'
-          """
-        }
-      }
+  steps {
+    script {
+      sh """
+        docker run --rm \
+          -v ${WORKSPACE}:/app \
+          -w /app \
+          --network host \
+          node:20-alpine \
+          sh -c "npm ci --prefer-offline --no-audit && npm run lint:types"
+      """
     }
+  }
+}
 
-    stage('Tests') {
-      steps {
-        script {
-          sh """
-            docker run --rm \
-              -v ${WORKSPACE}:/app \
-              -w /app \
-              --network host \
-              node:20-alpine \
-              sh -c 'npm ci --prefer-offline --no-audit && npm test -- --runInBand --forceExit'
-          """
-        }
-      }
-      post {
-        always {
-          echo "Tests executed"
-        }
-      }
+stage('Tests') {
+  steps {
+    script {
+      sh """
+        docker run --rm \
+          -v ${WORKSPACE}:/app \
+          -w /app \
+          --network host \
+          node:20-alpine \
+          sh -c "npm ci --prefer-offline --no-audit && npm test -- --runInBand --forceExit"
+      """
     }
+  }
+  post {
+    always {
+      echo "Tests executed"
+    }
+  }
+}
 
     stage('Build Docker Image') {
       steps {
