@@ -85,7 +85,7 @@ PYEOF
    stage('Lint & Type Check') {
   steps {
     script {
-      writeFile file: 'lint.sh', text: 'npm ci --prefer-offline --no-audit && npm run lint:types'
+      writeFile file: "${WORKSPACE}/lint.sh", text: 'npm ci --prefer-offline --no-audit && npm run lint:types'
       sh """
         docker run --rm \
           -v ${WORKSPACE}:/app \
@@ -101,7 +101,7 @@ PYEOF
 stage('Tests') {
   steps {
     script {
-      writeFile file: 'test.sh', text: 'npm ci --prefer-offline --no-audit && npm test -- --runInBand --forceExit'
+      writeFile file: "${WORKSPACE}/test.sh", text: 'npm ci --prefer-offline --no-audit && npm test -- --runInBand --forceExit'
       sh """
         docker run --rm \
           -v ${WORKSPACE}:/app \
