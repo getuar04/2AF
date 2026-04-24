@@ -20,13 +20,11 @@ pipeline {
 
     stage('Checkout') {
       steps {
+        // FIX 1: checkout i thjeshtë — nuk fshin package-lock.json
         checkout([
           $class: 'GitSCM',
           branches: [[name: '*/main']],
-          userRemoteConfigs: [[url: "${REPO_URL}"]],
-          extensions: [
-            [$class: 'CleanBeforeCheckout']
-          ]
+          userRemoteConfigs: [[url: "${REPO_URL}"]]
         ])
         echo "Checkout successful - commit: ${env.GIT_COMMIT?.take(8) ?: 'N/A'}"
       }
@@ -35,21 +33,20 @@ pipeline {
     stage('Setup Kubeconfig') {
       steps {
         script {
-          sh 'mkdir -p "${WORKSPACE}/.kube"'
+          // FIX 2: double quotes për të zgjeruar ${WORKSPACE}
+          sh "mkdir -p '${WORKSPACE}/.kube'"
+          sh "cp /var/jenkins_home/.kube/config '${WORKSPACE}/.kube/config'"
 
-          sh 'cp /var/jenkins_home/.kube/config "${WORKSPACE}/.kube/config"'
-
-          sh '''
+          sh """
             sed -i 's|https://127.0.0.1|https://host.docker.internal|g' \
-              "${WORKSPACE}/.kube/config"
+              '${WORKSPACE}/.kube/config'
             sed -i 's|https://localhost|https://host.docker.internal|g' \
-              "${WORKSPACE}/.kube/config"
-          '''
-
+              '${WORKSPACE}/.kube/config'
+          """
 
           sh """
             python3 - <<'PYEOF'
-import yaml, sys
+import yaml
 
 with open("${WORKSPACE}/.kube/config", "r") as f:
     cfg = yaml.safe_load(f)
@@ -68,7 +65,7 @@ print("Kubeconfig modified successfully")
 PYEOF
           """
 
-          sh 'kubectl cluster-info --kubeconfig "${WORKSPACE}/.kube/config"'
+          sh "kubectl cluster-info --kubeconfig '${WORKSPACE}/.kube/config'"
           echo "kubectl is connected to Kubernetes"
         }
       }
@@ -77,33 +74,19 @@ PYEOF
     stage('Verify Secrets') {
       steps {
         script {
+          // FIX 3: double quotes për të zgjeruar variablat
           def secretExists = sh(
-            script: '''
+            script: """
               kubectl get secret auth-secrets \
                 -n ${K8S_NAMESPACE} \
-                --kubeconfig "${WORKSPACE}/.kube/config" \
+                --kubeconfig '${WORKSPACE}/.kube/config' \
                 > /dev/null 2>&1
-            ''',
+            """,
             returnStatus: true
           )
 
           if (secretExists != 0) {
-            error("""
-SEKRET MUNGON: auth-secrets not found in namespace ${K8S_NAMESPACE}
-
-ZGJIDHJJA - Run the following command on your HOST:
-
-kubectl create secret generic auth-secrets \
-  --namespace=auth-service \
-  --from-literal=JWT_ACCESS_SECRET='vlera_jote' \
-  --from-literal=JWT_REFRESH_SECRET='vlera_jote' \
-  --from-literal=INTERNAL_API_KEY='vlera_jote' \
-  --from-literal=POSTGRES_USER='postgres' \
-  --from-literal=POSTGRES_PASSWORD='vlera_jote' \
-  --from-literal=REDIS_PASSWORD='vlera_jote'
-
-See SETUP.md for complete instructions.
-            """)
+            error("SEKRET MUNGON: auth-secrets not found in namespace ${K8S_NAMESPACE}. Krijo manualisht në host.")
           }
 
           echo "Secret auth-secrets exists in namespace ${K8S_NAMESPACE}"
@@ -114,14 +97,14 @@ See SETUP.md for complete instructions.
     stage('Lint & Type Check') {
       steps {
         script {
-          sh '''
+          sh """
             docker run --rm \
-              -v "${WORKSPACE}:/app" \
+              -v '${WORKSPACE}:/app' \
               -w /app \
               --network host \
               node:20-alpine \
               sh -c "npm ci --prefer-offline --no-audit && npm run lint:types"
-          '''
+          """
         }
       }
     }
@@ -129,14 +112,14 @@ See SETUP.md for complete instructions.
     stage('Tests') {
       steps {
         script {
-          sh '''
+          sh """
             docker run --rm \
-              -v "${WORKSPACE}:/app" \
+              -v '${WORKSPACE}:/app' \
               -w /app \
               --network host \
               node:20-alpine \
               sh -c "npm ci --prefer-offline --no-audit && npm test -- --runInBand --forceExit"
-          '''
+          """
         }
       }
       post {
@@ -192,7 +175,7 @@ See SETUP.md for complete instructions.
     stage('Deploy to Kubernetes') {
       steps {
         script {
-          def kube = "--kubeconfig \"${WORKSPACE}/.kube/config\""
+          def kube = "--kubeconfig '${WORKSPACE}/.kube/config'"
 
           sh "kubectl apply -f k8s/namespace.yaml ${kube}"
           sh "kubectl apply -f k8s/configmap.yaml ${kube}"
@@ -218,7 +201,6 @@ See SETUP.md for complete instructions.
 
           sh "kubectl rollout restart deployment/auth-service -n ${K8S_NAMESPACE} ${kube}"
 
-
           sh """
             kubectl rollout status deployment/auth-service \
               -n ${K8S_NAMESPACE} ${kube} --timeout=300s
@@ -232,7 +214,7 @@ See SETUP.md for complete instructions.
     stage('Run DB Migration') {
       steps {
         script {
-          def kube = "--kubeconfig \"${WORKSPACE}/.kube/config\""
+          def kube = "--kubeconfig '${WORKSPACE}/.kube/config'"
 
           def migrationExists = sh(
             script: 'test -f k8s/migration.yaml',
@@ -258,10 +240,7 @@ See SETUP.md for complete instructions.
 
   post {
     success {
-      echo """
-Build #${BUILD_NUMBER} deployed successfully!
-Image: ${FULL_IMAGE}:${IMAGE_TAG}
-      """
+      echo "Build #${BUILD_NUMBER} deployed: ${FULL_IMAGE}:${IMAGE_TAG}"
     }
     failure {
       echo "Build #${BUILD_NUMBER} failed. Check logs above."
