@@ -3,148 +3,255 @@ sequenceDiagram
 
     actor U as User
     participant F as Frontend
-    participant APP as Auth Service
-    participant DOM as Domain Policies
-    participant PG as PostgreSQL
-    participant R as Redis Cache
+    participant A as Auth Service
+    participant D as PostgreSQL
+    participant C as Redis Cache
     participant M as MongoDB Audit
     participant K as Kafka
-    participant GA as Google Authenticator
+    participant G as Google Authenticator
 
-    Note over U,K: 1. User registers account
+    Note over U,K: 1. Register — POST /auth/register
+
     U->>F: Fill register form
-    F->>APP: POST /auth/register {fullName, email, password}
-    APP->>DOM: validateFullName / validateEmail / validatePassword
-    DOM-->>APP: validation result
+    F->>A: POST /auth/register {fullName, email, password}
+    A->>A: RegisterPolicy.validateFullName / validateEmail / validatePassword
 
     alt Validation failed
-        APP-->>F: 400 Validation error
-        F-->>U: Show error
+        A-->>F: 400 {error: {message, code}}
+        F-->>U: Show validation error
     else Validation passed
-        APP->>PG: findByEmail(email)
-        PG-->>APP: User exists / not found
+        A->>D: findByEmail(email)
+        D-->>A: User | null
 
         alt Email already exists
-            APP->>M: Log REGISTER FAILED {email, EMAIL_ALREADY_EXISTS}
-            APP-->>F: 409 Email already exists
+            A->>M: create {action:REGISTER, status:FAILED, reason:EMAIL_ALREADY_EXISTS}
+            A-->>F: 409 {error: {message: Email already exists, code: EMAIL_ALREADY_EXISTS}}
             F-->>U: Show error
         else Email available
-            APP->>APP: bcrypt.hash(password)
-            APP->>APP: role = ADMIN_EMAILS.includes(email) ? admin : user
-            APP->>PG: INSERT users {id, fullName, email, passwordHash, role}
-            PG-->>APP: User created
-            APP->>M: Log REGISTER SUCCESS {userId, email, role}
-            APP->>K: Publish user.registered event
-            APP-->>F: 201 {id, fullName, email, role, isTwoFactorEnabled: false}
+            A->>A: bcrypt.hash(password, saltRounds=10)
+            A->>A: role = adminEmails.includes(email) ? admin : user
+            A->>A: id = uuidv4()
+            A->>D: INSERT users {id, fullName, email, passwordHash, role}
+            D-->>A: User created
+            A->>M: create {action:REGISTER, status:SUCCESS, userId, email, role}
+            A->>K: publish user.registered {userId, fullName, email, createdAt}
+            A-->>F: 201 {id, fullName, email, role, isTwoFactorEnabled: false}
             F-->>U: Account created
         end
     end
 
-    Note over U,K: 2. User login (2FA disabled)
+    Note over U,K: 2. Login — POST /auth/login
+
     U->>F: Fill login form
-    F->>APP: POST /auth/login {email, password}
-    APP->>DOM: validateEmail / validatePassword
-    DOM-->>APP: validation result
-    APP->>PG: findByEmail(email)
-    PG-->>APP: User / null
+    F->>A: POST /auth/login {email, password}
+    A->>A: LoginPolicy.validateEmail / validatePassword
+    A->>D: findByEmail(email)
+    D-->>A: User | null
 
     alt User not found or password wrong
-        APP-->>F: 401 Invalid credentials
+        A-->>F: 401 {error: {message: Invalid credentials, code: INVALID_CREDENTIALS}}
         F-->>U: Show error
-    else Valid credentials - 2FA disabled
-        APP->>APP: jwt.sign({userId, email, role}, accessSecret, 15m)
-        APP->>APP: jwt.sign({userId, email, role}, refreshSecret, 7d)
-        APP->>M: Log LOGIN SUCCESS {userId, email, viaTwoFactor: false}
-        APP->>K: Publish user.logged_in event
-        APP-->>F: 200 {status: SUCCESS, accessToken, refreshToken}
+    else Valid credentials — 2FA disabled
+        A->>A: jwt.sign({userId, email, role}, JWT_ACCESS_SECRET, 15m) → accessToken
+        A->>A: jwt.sign({userId, email, role}, JWT_REFRESH_SECRET, 7d) → refreshToken
+        A->>M: create {action:LOGIN, status:SUCCESS, metadata:{viaTwoFactor:false}}
+        A->>K: publish user.logged_in {userId, email, loggedInAt, viaTwoFactor: false}
+        A-->>F: 200 {status:SUCCESS, accessToken} + Set-Cookie: refreshToken HttpOnly Secure SameSite=Strict
         F-->>U: Enter dashboard
-    else Valid credentials - 2FA enabled
-        APP->>APP: idGenerator.generate() → challengeId
-        APP->>R: SET auth:login:challenge:{challengeId} TTL:300s
-        R-->>APP: OK
-        APP-->>F: 202 {status: REQUIRE_2FA, challengeId, userId, email}
+    else Valid credentials — 2FA enabled
+        A->>A: challengeId = uuidv4()
+        A->>C: SET auth:login:challenge:{challengeId} = JSON.stringify({challengeId,userId,email,role,createdAt}) TTL:300s
+        C-->>A: OK
+        A-->>F: 202 {status:REQUIRE_2FA, challengeId, userId, email, message}
         F-->>U: Show 2FA code input
     end
 
-    Note over U,K: 3. User starts 2FA setup
-    U->>F: Open 2FA setup
-    F->>APP: POST /auth/2fa/init {userId}
-    APP->>PG: findById(userId)
-    PG-->>APP: User found
-    APP->>APP: speakeasy.generateSecret()
-    APP->>APP: qrcode.toDataURL(otpauthUrl)
-    APP->>APP: idGenerator.generate() → setupToken
-    APP->>R: SET auth:2fa:setup:{userId}:{setupToken} = secret TTL:300s
-    R-->>APP: OK
-    APP->>M: Log ENABLE_2FA_INIT INFO {userId, setupToken}
-    APP-->>F: 200 {qrCodeDataUrl, manualEntryKey, setupToken}
-    F-->>U: Display QR code
+    Note over U,C: 3. Start 2FA setup — POST /auth/2fa/init
 
-    Note over U,GA: 4. User adds account in Google Authenticator
-    U->>GA: Scan QR code or enter manual key
-    GA-->>U: Generate 6-digit code
+    U->>F: Open 2FA setup page
+    F->>A: POST /auth/2fa/init  Authorization: Bearer accessToken
+    A->>A: requireAuth — jwt.verify(token, JWT_ACCESS_SECRET)
+    A->>C: GET auth:blacklist:{accessToken}
 
-    Note over U,K: 5. User confirms 2FA setup
+    alt Token invalid or blacklisted
+        A-->>F: 401 {error: {code: UNAUTHORIZED | TOKEN_INVALIDATED}}
+        F-->>U: Redirect to login
+    else Authenticated — userId from token payload
+        A->>D: findById(userId)
+        D-->>A: User found
+
+        alt isTwoFactorEnabled already true
+            A-->>F: 400 {error: {code: TWO_FACTOR_ALREADY_ENABLED}}
+            F-->>U: Show already enabled message
+        else Not yet enabled
+            A->>A: speakeasy.generateSecret({label:email, issuer:Authentication Service})
+            A->>A: qrcode.toDataURL(otpauthUrl) → qrCodeDataUrl
+            A->>A: setupToken = uuidv4()
+            A->>C: SET auth:2fa:setup:{userId}:{setupToken} = base32secret TTL:300s
+            C-->>A: OK
+            A->>M: create {action:ENABLE_2FA_INIT, status:INFO, userId, email, metadata:{setupToken}}
+            A-->>F: 200 {qrCodeDataUrl, manualEntryKey, setupToken}
+            F-->>U: Display QR code and manual entry key
+        end
+    end
+
+    Note over U,G: 4. User adds account in Google Authenticator
+    U->>G: Scan QR code or enter manual key
+    G-->>U: Generate 6-digit TOTP code
+
+    Note over U,K: 5. Confirm 2FA setup — POST /auth/2fa/confirm
+
     U->>F: Enter 6-digit code
-    F->>APP: POST /auth/2fa/confirm {userId, setupToken, code}
-    APP->>DOM: TwoFactorPolicy.validateCode(code)
-    DOM-->>APP: validation result
-    APP->>PG: findById(userId)
-    PG-->>APP: User found
-    APP->>R: GET auth:2fa:setup:{userId}:{setupToken}
-    R-->>APP: secret / null
+    F->>A: POST /auth/2fa/confirm {code, setupToken}  Authorization: Bearer accessToken
+    A->>A: requireAuth — jwt.verify(token) → {userId, email, role}
+    A->>A: TwoFactorPolicy.validateCode(code) — /^\d{6}$/
+    A->>A: TwoFactorPolicy.validateSetupToken(setupToken)
+    A->>D: findById(userId)
+    D-->>A: User found
+    A->>C: GET auth:2fa:setup:{userId}:{setupToken}
+    C-->>A: base32secret | null
 
     alt Setup session expired (TTL 300s)
-        APP-->>F: 400 Setup session expired or not found
+        A-->>F: 400 {error: {code: SETUP_SESSION_EXPIRED}}
         F-->>U: Show expired session message
     else Secret found
-        APP->>APP: speakeasy.totp.verify(secret, code)
+        A->>A: speakeasy.totp.verify(base32secret, code, window=1)
 
         alt Code invalid
-            APP-->>F: 401 Invalid 2FA code
+            A-->>F: 401 {error: {code: INVALID_2FA_CODE}}
             F-->>U: Show invalid code message
         else Code valid
-            APP->>PG: UPDATE users SET twoFactorSecret, isTwoFactorEnabled=true
-            PG-->>APP: Updated
-            APP->>R: DELETE auth:2fa:setup:{userId}:{setupToken}
-            R-->>APP: Deleted
-            APP->>M: Log ENABLE_2FA_CONFIRM SUCCESS {userId}
-            APP->>K: Publish user.two_factor_enabled event
-            APP-->>F: 200 {message, isTwoFactorEnabled: true}
-            F-->>U: 2FA enabled successfully
+            A->>D: UPDATE users SET twoFactorSecret=secret, isTwoFactorEnabled=true WHERE id=userId
+            D-->>A: Updated
+            A->>C: DELETE auth:2fa:setup:{userId}:{setupToken}
+            C-->>A: Deleted
+            A->>M: create {action:ENABLE_2FA_CONFIRM, status:SUCCESS, userId, email}
+            A->>K: publish user.two_factor_enabled {userId, email, enabledAt}
+            A-->>F: 200 {message: Two-factor authentication enabled successfully, isTwoFactorEnabled: true}
+            F-->>U: 2FA enabled
         end
     end
 
-    Note over U,K: 6. User login (2FA enabled) - verify code
-    U->>GA: Open Google Authenticator
-    GA-->>U: Generate 6-digit code
+    Note over U,G: 6. Get code from Google Authenticator
+    U->>G: Open app
+    G-->>U: Generate 6-digit TOTP code
+
+    Note over U,K: 7. Verify 2FA login — POST /auth/login/2fa
+
     U->>F: Enter 6-digit code
-    F->>APP: POST /auth/login/2fa {email, challengeId, code}
-    APP->>DOM: TwoFactorPolicy.validateCode(code)
-    APP->>DOM: TwoFactorPolicy.validateChallengeId(challengeId)
-    DOM-->>APP: validation result
-    APP->>R: GET auth:login:challenge:{challengeId}
-    R-->>APP: challenge data / null
+    F->>A: POST /auth/login/2fa {email, challengeId, code}
+    A->>A: TwoFactorPolicy.validateCode(code)
+    A->>A: TwoFactorPolicy.validateChallengeId(challengeId)
+    A->>C: GET auth:login:challenge:{challengeId}
+    C-->>A: serializedChallenge | null
 
     alt Challenge expired (TTL 300s)
-        APP-->>F: 400 Login challenge expired or not found
+        A-->>F: 400 {error: {code: LOGIN_CHALLENGE_EXPIRED}}
         F-->>U: Show expired challenge message
     else Challenge found
-        APP->>PG: findByEmail(email)
-        PG-->>APP: User with twoFactorSecret
-        APP->>APP: speakeasy.totp.verify(twoFactorSecret, code)
+        A->>A: JSON.parse(serializedChallenge) → challenge
+        A->>A: Verify challenge.email === input.email
 
-        alt Code invalid
-            APP-->>F: 401 Invalid 2FA code
-            F-->>U: Show invalid code message
-        else Code valid
-            APP->>APP: jwt.sign({userId, email, role}, accessSecret, 15m)
-            APP->>APP: jwt.sign({userId, email, role}, refreshSecret, 7d)
-            APP->>R: DELETE auth:login:challenge:{challengeId}
-            R-->>APP: Deleted
-            APP->>M: Log VERIFY_LOGIN_2FA SUCCESS {userId, email, role}
-            APP->>K: Publish user.logged_in {viaTwoFactor: true}
-            APP-->>F: 200 {accessToken, refreshToken}
-            F-->>U: Enter dashboard
+        alt Email mismatch
+            A-->>F: 400 {error: {code: CHALLENGE_EMAIL_MISMATCH}}
+            F-->>U: Show mismatch error
+        else Email matches
+            A->>D: findByEmail(email)
+            D-->>A: User with twoFactorSecret
+            A->>A: speakeasy.totp.verify(twoFactorSecret, code, window=1)
+
+            alt Code invalid
+                A-->>F: 401 {error: {code: INVALID_2FA_CODE}}
+                F-->>U: Show invalid code message
+            else Code valid
+                A->>A: jwt.sign({userId, email, role}, JWT_ACCESS_SECRET, 15m) → accessToken
+                A->>A: jwt.sign({userId, email, role}, JWT_REFRESH_SECRET, 7d) → refreshToken
+                A->>C: DELETE auth:login:challenge:{challengeId}
+                C-->>A: Deleted
+                A->>M: create {action:VERIFY_LOGIN_2FA, status:SUCCESS, metadata:{viaTwoFactor:true, challengeId}}
+                A->>K: publish user.logged_in {userId, email, loggedInAt, viaTwoFactor: true}
+                A-->>F: 200 {accessToken} + Set-Cookie: refreshToken HttpOnly Secure SameSite=Strict
+                F-->>U: Enter dashboard
+            end
         end
     end
+
+    Note over U,M: 8. Refresh access token — POST /auth/refresh
+
+    U->>F: accessToken expired
+    F->>A: POST /auth/refresh  Cookie: refreshToken=...
+    A->>A: Read refreshToken from req.cookies.refreshToken
+
+    alt Cookie missing
+        A-->>F: 401 {error: {code: REFRESH_TOKEN_MISSING}}
+        F-->>U: Redirect to login
+    else Cookie present
+        A->>A: jwt.verify(refreshToken, JWT_REFRESH_SECRET) → {userId, email, role}
+
+        alt Invalid or expired refreshToken
+            A-->>F: 401 {error: {code: INVALID_REFRESH_TOKEN}}
+            F-->>U: Redirect to login
+        else Valid refreshToken
+            A->>D: findById(userId)
+            D-->>A: User found
+            A->>A: jwt.sign({userId, email, role}, JWT_ACCESS_SECRET, 15m) → accessToken
+            A->>M: create {action:REFRESH_TOKEN, status:SUCCESS, userId, email}
+            A-->>F: 200 {accessToken}
+            F-->>U: Continue session
+        end
+    end
+
+    Note over U,C: 9. Logout — POST /auth/logout
+
+    U->>F: Click logout
+    F->>A: POST /auth/logout  Authorization: Bearer accessToken
+    A->>A: requireAuth — jwt.verify(accessToken) → {userId, email, role}
+    A->>C: GET auth:blacklist:{accessToken}
+
+    alt Token invalid or already blacklisted
+        A-->>F: 401 Unauthorized
+        F-->>U: Already logged out
+    else Valid token
+        A->>C: SET auth:blacklist:{accessToken} = 1  TTL:900s
+        C-->>A: OK
+        A->>M: create {action:LOGOUT, status:SUCCESS, userId, email}
+        A-->>F: 200 {message: Logged out successfully} + Set-Cookie: refreshToken= Max-Age=0
+        F-->>U: Redirect to login
+    end
+
+    Note over U,M: 10. Admin — GET /admin/audit-logs
+
+    U->>F: Open admin dashboard
+    F->>A: GET /admin/audit-logs?page=1&limit=20  Authorization: Bearer accessToken
+    A->>A: requireAdmin — jwt.verify(accessToken) → payload
+
+    alt Not authenticated
+        A-->>F: 401 {error: {code: UNAUTHORIZED}}
+        F-->>U: Redirect to login
+    else role !== admin
+        A-->>F: 403 {error: {message: Admin access required, code: FORBIDDEN}}
+        F-->>U: Show forbidden error
+    else Admin authenticated
+        A->>M: findAll(filters, page, limit) — sort createdAt desc
+        M-->>A: {data: AuditLog[], total, page, limit}
+        A-->>F: 200 {items, total, page, limit}
+        F-->>U: Display audit logs table
+    end
+
+    Note over U,C: 11. Admin — Debug endpoints
+
+    U->>F: Open debug tools
+    F->>A: GET /admin/debug/redis/health  Authorization: Bearer accessToken
+    A->>C: SET + GET + DELETE admin:health:{timestamp}
+    C-->>A: OK
+    A-->>F: 200 {status: ok, connected: true|false}
+
+    F->>A: GET /admin/debug/login-challenge/{challengeId}  Authorization: Bearer accessToken
+    A->>C: GET 2fa:login:{challengeId}
+    C-->>A: value | null
+    A-->>F: 200 {type: LOGIN_CHALLENGE, key, exists, ttlSeconds}
+
+    F->>A: GET /admin/debug/2fa-setup/{userId}/{token}  Authorization: Bearer accessToken
+    A->>C: GET 2fa:setup:{userId}:{token}
+    C-->>A: value | null
+    A-->>F: 200 {type: TWO_FACTOR_SETUP, key, exists, ttlSeconds}
