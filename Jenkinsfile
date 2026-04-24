@@ -91,7 +91,7 @@ PYEOF
           -w /app \
           --network host \
           node:20-alpine \
-          sh -c "npm ci --prefer-offline --no-audit && npm run lint:types"
+          sh -c "npm ci --prefer-offline --no-audit \&\& npm run lint:types"
       """
     }
   }
@@ -106,7 +106,7 @@ stage('Tests') {
           -w /app \
           --network host \
           node:20-alpine \
-          sh -c "npm ci --prefer-offline --no-audit && npm test -- --runInBand --forceExit"
+          sh -c "npm ci --prefer-offline --no-audit \&\& npm test -- --runInBand --forceExit"
       """
     }
   }
