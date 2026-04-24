@@ -70,7 +70,6 @@ describe("Admin routes", () => {
   describe("GET /admin/audit-logs", () => {
     it("should return 401 when authorization header is missing", async () => {
       const response = await request(app).get("/admin/audit-logs");
-
       expect(response.status).toBe(401);
       expect(response.body).toEqual({
         error: {
@@ -84,7 +83,6 @@ describe("Admin routes", () => {
       const response = await request(app)
         .get("/admin/audit-logs")
         .set("Authorization", `Bearer ${userToken}`);
-
       expect(response.status).toBe(403);
       expect(response.body).toEqual({
         error: {
@@ -98,7 +96,6 @@ describe("Admin routes", () => {
       const response = await request(app)
         .get("/admin/audit-logs")
         .set("Authorization", `Bearer ${adminToken}`);
-
       expect(response.status).toBe(200);
       expect(response.body.total).toBe(2);
       expect(response.body.page).toBe(1);
@@ -111,7 +108,6 @@ describe("Admin routes", () => {
       const response = await request(app)
         .get("/admin/audit-logs?email=admin@example.com")
         .set("Authorization", `Bearer ${adminToken}`);
-
       expect(response.status).toBe(200);
       expect(response.body.total).toBe(1);
       expect(response.body.items[0].email).toBe("admin@example.com");
@@ -122,7 +118,6 @@ describe("Admin routes", () => {
       const response = await request(app)
         .get("/admin/audit-logs?action=REGISTER")
         .set("Authorization", `Bearer ${adminToken}`);
-
       expect(response.status).toBe(200);
       expect(response.body.total).toBe(1);
       expect(response.body.items[0].action).toBe("REGISTER");
@@ -132,7 +127,6 @@ describe("Admin routes", () => {
       const response = await request(app)
         .get("/admin/audit-logs?page=1&limit=1")
         .set("Authorization", `Bearer ${adminToken}`);
-
       expect(response.status).toBe(200);
       expect(response.body.total).toBe(2);
       expect(response.body.page).toBe(1);
@@ -146,7 +140,6 @@ describe("Admin routes", () => {
       const response = await request(app)
         .get("/admin/debug/redis/health")
         .set("Authorization", `Bearer ${userToken}`);
-
       expect(response.status).toBe(403);
     });
 
@@ -154,7 +147,6 @@ describe("Admin routes", () => {
       const response = await request(app)
         .get("/admin/debug/redis/health")
         .set("Authorization", `Bearer ${adminToken}`);
-
       expect(response.status).toBe(200);
       expect(response.body.status).toBe("ok");
     });
@@ -165,7 +157,6 @@ describe("Admin routes", () => {
       const response = await request(app)
         .get("/admin/debug/login-challenge/missing-challenge")
         .set("Authorization", `Bearer ${adminToken}`);
-
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
         type: "LOGIN_CHALLENGE",
@@ -186,11 +177,9 @@ describe("Admin routes", () => {
         }),
         { ttlSeconds: 300 },
       );
-
       const response = await request(app)
         .get("/admin/debug/login-challenge/test-challenge")
         .set("Authorization", `Bearer ${adminToken}`);
-
       expect(response.status).toBe(200);
       expect(response.body.type).toBe("LOGIN_CHALLENGE");
       expect(response.body.key).toBe("2fa:login:test-challenge");
@@ -207,7 +196,6 @@ describe("Admin routes", () => {
       const response = await request(app)
         .get("/admin/debug/2fa-setup/u1/token123")
         .set("Authorization", `Bearer ${adminToken}`);
-
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
         type: "TWO_FACTOR_SETUP",
@@ -227,11 +215,9 @@ describe("Admin routes", () => {
         }),
         { ttlSeconds: 300 },
       );
-
       const response = await request(app)
         .get("/admin/debug/2fa-setup/u1/token123")
         .set("Authorization", `Bearer ${adminToken}`);
-
       expect(response.status).toBe(200);
       expect(response.body.type).toBe("TWO_FACTOR_SETUP");
       expect(response.body.key).toBe("2fa:setup:u1:token123");
