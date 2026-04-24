@@ -1,5 +1,6 @@
 import { EnableTwoFactor } from "./app/usecases/enableTwoFactor";
 import { LoginUser } from "./app/usecases/loginUser";
+import { LogoutUser } from "./app/usecases/logoutUser";
 import { RegisterUser } from "./app/usecases/registerUser";
 import { VerifyLoginTwoFactor } from "./app/usecases/verifyLoginTwoFactor";
 import { RefreshToken } from "./app/usecases/refreshToken";
@@ -81,6 +82,13 @@ const refreshTokenUseCase = new RefreshToken(
   idGenerator
 );
 
+const logoutUserUseCase = new LogoutUser(
+  cacheProvider,
+  authAuditRepository,
+  idGenerator,
+  900 // accessToken TTL sekonda (15 min)
+);
+
 const getAuditLogsUseCase = new GetAuditLogs(authAuditRepository);
 
 export const authController = new AuthController(
@@ -88,7 +96,8 @@ export const authController = new AuthController(
   enableTwoFactorUseCase,
   loginUserUseCase,
   verifyLoginTwoFactorUseCase,
-  refreshTokenUseCase
+  refreshTokenUseCase,
+  logoutUserUseCase
 );
 
 export const adminController = new AdminController(getAuditLogsUseCase, cacheProvider);

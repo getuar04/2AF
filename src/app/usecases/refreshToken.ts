@@ -1,9 +1,10 @@
-import { RefreshTokenInputDto, RefreshTokenOutputDto } from "../dtos/authDtos";
+import { RefreshTokenOutputDto } from "../dtos/authDtos";
 import { AuthAuditRepository } from "../ports/authAuditRepository";
 import { IdGenerator } from "../ports/idGenerator";
 import { TokenProvider } from "../ports/tokenProvider";
 import { UserRepository } from "../ports/userRepository";
 import { AuditService } from "../services/auditService";
+import { AppError } from "../errors/appError";
 
 export class RefreshToken {
   constructor(
@@ -13,12 +14,16 @@ export class RefreshToken {
     private readonly idGenerator: IdGenerator
   ) {}
 
-  async execute(input: RefreshTokenInputDto): Promise<RefreshTokenOutputDto> {
-    const payload = await this.tokenProvider.verifyRefreshToken(input.refreshToken);
+  async execute(refreshToken: string): Promise<RefreshTokenOutputDto> {
+    if (!refreshToken) {
+      throw new AppError("Refresh token is required", 400, "REFRESH_TOKEN_REQUIRED");
+    }
+
+    const payload = await this.tokenProvider.verifyRefreshToken(refreshToken);
 
     const user = await this.userRepository.findById(payload.userId);
     if (!user) {
-      throw new Error("User not found");
+      throw new AppError("User not found", 404, "USER_NOT_FOUND");
     }
 
     const accessToken = await this.tokenProvider.generateAccessToken({

@@ -13,6 +13,11 @@ import { AuditService } from "../services/auditService";
 import { AuthService } from "../services/authService";
 import { LoginChallengeService } from "../services/loginChallengeService";
 
+export interface VerifyLoginTwoFactorResult {
+  output: VerifyLoginTwoFactorOutputDto;
+  refreshToken: string;
+}
+
 export class VerifyLoginTwoFactor {
   constructor(
     private readonly userRepository: UserRepository,
@@ -24,7 +29,7 @@ export class VerifyLoginTwoFactor {
     private readonly idGenerator: IdGenerator
   ) {}
 
-  async execute(input: VerifyLoginTwoFactorInputDto): Promise<VerifyLoginTwoFactorOutputDto> {
+  async execute(input: VerifyLoginTwoFactorInputDto): Promise<VerifyLoginTwoFactorResult> {
     const email = input.email.trim().toLowerCase();
     const code = input.code.trim();
     const challengeId = input.challengeId.trim();
@@ -78,6 +83,9 @@ export class VerifyLoginTwoFactor {
     };
     await this.eventBus.publish(event);
 
-    return { accessToken, refreshToken };
+    return {
+      output: { accessToken },
+      refreshToken
+    };
   }
 }

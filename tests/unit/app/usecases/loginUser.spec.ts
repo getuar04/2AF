@@ -14,40 +14,28 @@ describe("LoginUser", () => {
     create: jest.fn(),
     enableTwoFactor: jest.fn(),
   };
-
   const mockPasswordHasher: jest.Mocked<PasswordHasher> = {
     hash: jest.fn(),
     compare: jest.fn(),
   };
-
   const mockTokenProvider: jest.Mocked<TokenProvider> = {
     generateAccessToken: jest.fn(),
     generateRefreshToken: jest.fn(),
     verifyRefreshToken: jest.fn(),
   };
-
   const mockCacheProvider: jest.Mocked<CacheProvider> = {
     set: jest.fn(),
     get: jest.fn(),
     delete: jest.fn(),
   };
-
   const mockAuditRepository: jest.Mocked<AuthAuditRepository> = {
     create: jest.fn(),
     findAll: jest.fn(),
   };
+  const mockEventBus: jest.Mocked<EventBus> = { publish: jest.fn() };
+  const mockIdGenerator: jest.Mocked<IdGenerator> = { generate: jest.fn() };
 
-  const mockEventBus: jest.Mocked<EventBus> = {
-    publish: jest.fn(),
-  };
-
-  const mockIdGenerator: jest.Mocked<IdGenerator> = {
-    generate: jest.fn(),
-  };
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+  beforeEach(() => jest.clearAllMocks());
 
   it("should return accessToken and refreshToken when 2FA is disabled", async () => {
     mockUserRepository.findByEmail.mockResolvedValue({
@@ -60,22 +48,33 @@ describe("LoginUser", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-
     mockPasswordHasher.compare.mockResolvedValue(true);
     mockTokenProvider.generateAccessToken.mockResolvedValue("access-jwt");
     mockTokenProvider.generateRefreshToken.mockResolvedValue("refresh-jwt");
     mockIdGenerator.generate.mockReturnValue("audit-id");
 
     const useCase = new LoginUser(
-      mockUserRepository, mockPasswordHasher, mockTokenProvider,
-      mockCacheProvider, mockAuditRepository, mockEventBus, mockIdGenerator, 300
+      mockUserRepository,
+      mockPasswordHasher,
+      mockTokenProvider,
+      mockCacheProvider,
+      mockAuditRepository,
+      mockEventBus,
+      mockIdGenerator,
+      300,
     );
 
-    const result = await useCase.execute({ email: "getuar@test.ts", password: "12345678" });
+    const { output, refreshToken } = await useCase.execute({
+      email: "getuar@test.ts",
+      password: "12345678",
+    });
 
-    expect(result).toEqual({ status: "SUCCESS", accessToken: "access-jwt", refreshToken: "refresh-jwt" });
+    expect(output).toEqual({ status: "SUCCESS", accessToken: "access-jwt" });
+    expect(refreshToken).toBe("refresh-jwt");
     expect(mockTokenProvider.generateRefreshToken).toHaveBeenCalled();
-    expect(mockEventBus.publish).toHaveBeenCalledWith(expect.objectContaining({ eventName: "user.logged_in" }));
+    expect(mockEventBus.publish).toHaveBeenCalledWith(
+      expect.objectContaining({ eventName: "user.logged_in" }),
+    );
   });
 
   it("should require 2FA when enabled", async () => {
@@ -90,18 +89,28 @@ describe("LoginUser", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-
     mockPasswordHasher.compare.mockResolvedValue(true);
-    mockIdGenerator.generate.mockReturnValueOnce("challenge-id").mockReturnValueOnce("audit-id");
+    mockIdGenerator.generate
+      .mockReturnValueOnce("challenge-id")
+      .mockReturnValueOnce("audit-id");
 
     const useCase = new LoginUser(
-      mockUserRepository, mockPasswordHasher, mockTokenProvider,
-      mockCacheProvider, mockAuditRepository, mockEventBus, mockIdGenerator, 300
+      mockUserRepository,
+      mockPasswordHasher,
+      mockTokenProvider,
+      mockCacheProvider,
+      mockAuditRepository,
+      mockEventBus,
+      mockIdGenerator,
+      300,
     );
 
-    const result = await useCase.execute({ email: "getuar@test.ts", password: "12345678" });
+    const { output } = await useCase.execute({
+      email: "getuar@test.ts",
+      password: "12345678",
+    });
 
-    expect(result).toEqual({
+    expect(output).toEqual({
       status: "REQUIRE_2FA",
       challengeId: "challenge-id",
       userId: "user-1",

@@ -41,7 +41,7 @@ export interface LoginUserInputDto {
 export interface LoginUserSuccessOutputDto {
   status: "SUCCESS";
   accessToken: string;
-  refreshToken: string;
+  // refreshToken ruhet ne HttpOnly cookie — nuk kthehet ne body
 }
 
 export interface LoginUserRequireTwoFactorOutputDto {
@@ -62,13 +62,13 @@ export interface VerifyLoginTwoFactorInputDto {
 
 export interface VerifyLoginTwoFactorOutputDto {
   accessToken: string;
-  refreshToken: string;
-}
-
-export interface RefreshTokenInputDto {
-  refreshToken: string;
+  // refreshToken ruhet ne HttpOnly cookie — nuk kthehet ne body
 }
 
 export interface RefreshTokenOutputDto {
   accessToken: string;
+}
+
+export interface LogoutOutputDto {
+  message: string;
 }

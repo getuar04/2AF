@@ -10,7 +10,6 @@ describe("Auth routes", () => {
       .post("/auth/register")
       .send({ fullName: "Normal User", email: "user@example.com", password: "Password123" })
       .expect(201);
-
     expect(res.body.role).toBe("user");
     expect(res.body.isTwoFactorEnabled).toBe(false);
   });
@@ -20,11 +19,10 @@ describe("Auth routes", () => {
       .post("/auth/register")
       .send({ fullName: "Admin User", email: "admin@test.com", password: "Password123" })
       .expect(201);
-
     expect(res.body.role).toBe("admin");
   });
 
-  it("login returns accessToken and refreshToken", async () => {
+  it("login returns accessToken and sets refreshToken cookie", async () => {
     await request(app)
       .post("/auth/register")
       .send({ fullName: "Login Test", email: "logintest@example.com", password: "Password123" });
@@ -36,7 +34,9 @@ describe("Auth routes", () => {
 
     expect(res.body.status).toBe("SUCCESS");
     expect(res.body.accessToken).toBeTruthy();
-    expect(res.body.refreshToken).toBeTruthy();
+    const setCookie = res.headers["set-cookie"] as unknown as string[];
+    expect(setCookie).toBeDefined();
+    expect(setCookie[0]).toContain("refreshToken");
   });
 
   it("refresh token returns new accessToken", async () => {
@@ -49,11 +49,12 @@ describe("Auth routes", () => {
       .send({ email: "refreshtest@example.com", password: "Password123" })
       .expect(200);
 
-    const { refreshToken } = loginRes.body as { refreshToken: string };
+    const setCookie = loginRes.headers["set-cookie"] as unknown as string[];
+    const refreshCookie = setCookie.find((c: string) => c.startsWith("refreshToken=")) ?? "";
 
     const refreshRes = await request(app)
       .post("/auth/refresh")
-      .send({ refreshToken })
+      .set("Cookie", refreshCookie)
       .expect(200);
 
     expect(refreshRes.body.accessToken).toBeTruthy();
@@ -95,6 +96,8 @@ describe("Auth routes", () => {
       .expect(200);
 
     expect(verifyRes.body.accessToken).toBeTruthy();
-    expect(verifyRes.body.refreshToken).toBeTruthy();
+    const verifyCookies = verifyRes.headers["set-cookie"] as unknown as string[];
+    expect(verifyCookies).toBeDefined();
+    expect(verifyCookies[0]).toContain("refreshToken");
   });
 });

@@ -1,4 +1,24 @@
 apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-migrations
+  namespace: auth-service
+data:
+  create_users_table.sql: |
+    CREATE TABLE IF NOT EXISTS users (
+      id VARCHAR(36) PRIMARY KEY,
+      full_name VARCHAR(255) NOT NULL,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password_hash VARCHAR(255) NOT NULL,
+      role VARCHAR(20) NOT NULL DEFAULT 'user',
+      is_two_factor_enabled BOOLEAN DEFAULT false,
+      two_factor_secret VARCHAR(255),
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'user';
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-pvc
@@ -41,6 +61,8 @@ spec:
                   key: POSTGRES_PASSWORD
             - name: POSTGRES_DB
               value: 2af
+            - name: POSTGRES_INITDB_ARGS
+              value: "--encoding=UTF8"
           ports:
             - containerPort: 5432
           resources:
@@ -53,16 +75,20 @@ spec:
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
+            - name: migrations
+              mountPath: /docker-entrypoint-initdb.d
           readinessProbe:
             exec:
-              command:
-                ["pg_isready", "-U", "$(POSTGRES_USER)", "-d", "$(POSTGRES_DB)"]
+              command: ["pg_isready", "-U", "postgres", "-d", "2af"]
             initialDelaySeconds: 10
             periodSeconds: 5
       volumes:
         - name: postgres-data
           persistentVolumeClaim:
             claimName: postgres-pvc
+        - name: migrations
+          configMap:
+            name: postgres-migrations
 ---
 apiVersion: v1
 kind: Service

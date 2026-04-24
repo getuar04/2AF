@@ -13,6 +13,11 @@ import { AuditService } from "../services/auditService";
 import { AuthService } from "../services/authService";
 import { LoginChallengeService } from "../services/loginChallengeService";
 
+export interface LoginUserResult {
+  output: LoginUserOutputDto;
+  refreshToken?: string; // kthehet vetem kur login eshte SUCCESS
+}
+
 export class LoginUser {
   constructor(
     private readonly userRepository: UserRepository,
@@ -25,7 +30,7 @@ export class LoginUser {
     private readonly loginChallengeTtlSeconds: number
   ) {}
 
-  async execute(input: LoginUserInputDto): Promise<LoginUserOutputDto> {
+  async execute(input: LoginUserInputDto): Promise<LoginUserResult> {
     const email = input.email.trim().toLowerCase();
     const password = input.password;
 
@@ -54,11 +59,13 @@ export class LoginUser {
       });
       await this.cacheProvider.set(cacheKey, serialized, { ttlSeconds: this.loginChallengeTtlSeconds });
       return {
-        status: "REQUIRE_2FA",
-        challengeId,
-        userId: user.id,
-        email: user.email,
-        message: "Two-factor authentication is required"
+        output: {
+          status: "REQUIRE_2FA",
+          challengeId,
+          userId: user.id,
+          email: user.email,
+          message: "Two-factor authentication is required"
+        }
       };
     }
 
@@ -82,6 +89,9 @@ export class LoginUser {
     };
     await this.eventBus.publish(event);
 
-    return { status: "SUCCESS", accessToken, refreshToken };
+    return {
+      output: { status: "SUCCESS", accessToken },
+      refreshToken
+    };
   }
 }

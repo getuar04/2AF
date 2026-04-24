@@ -1,4 +1,5 @@
 import express from "express";
+import cookieParser from "cookie-parser";
 import authRoutes from "./infra/http/routes/auth";
 import adminRoutes from "./infra/http/routes/admin";
 import { errorHandler } from "./infra/http/middlewares/errorHandler";
@@ -6,7 +7,8 @@ import { env } from "./infra/config/env";
 
 export function createApp() {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: "10kb" }));
+  app.use(cookieParser());
 
   app.get("/health", (_req, res) => {
     res.status(200).json({

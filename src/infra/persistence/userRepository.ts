@@ -1,5 +1,9 @@
 import { v4 as uuidv4 } from "uuid";
-import { CreateUserInput, EnableUserTwoFactorInput, UserRepository } from "../../app/ports/userRepository";
+import {
+  CreateUserInput,
+  EnableUserTwoFactorInput,
+  UserRepository,
+} from "../../app/ports/userRepository";
 import { User } from "../../app/types/auth";
 
 export class UserRepositoryImpl implements UserRepository {
