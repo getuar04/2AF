@@ -12,7 +12,6 @@ pipeline {
   }
 
   options {
-    cleanWs()
     timeout(time: 60, unit: 'MINUTES')
     disableConcurrentBuilds()
   }
