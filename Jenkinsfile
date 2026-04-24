@@ -38,7 +38,7 @@ pipeline {
         script {
           sh 'mkdir -p "${WORKSPACE}/.kube"'
 
-          sh 'cp /root/.kube/config "${WORKSPACE}/.kube/config"'
+          sh 'cp /var/jenkins_home/.kube/config "${WORKSPACE}/.kube/config"'
 
           sh '''
             sed -i 's|https://127.0.0.1|https://host.docker.internal|g' \
