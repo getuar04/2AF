@@ -47,18 +47,13 @@ PYEOF
         sh 'npm test'
       }
     }
-    stage('Pre-pull Base Image') {
-      steps {
-        retry(2) {
-          sh 'docker pull node:20-alpine'
-        }
-      }
-    }
     stage('Build Docker Image') {
       steps {
         retry(2) {
           sh """
             docker build \
+              --network=host \
+              --cache-from ${IMAGE_NAME}:latest \
               -t ${IMAGE_NAME}:${IMAGE_TAG} \
               -t ${IMAGE_NAME}:latest \
               .
