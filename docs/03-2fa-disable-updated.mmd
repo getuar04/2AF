@@ -1,0 +1,67 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant F as Frontend
+    participant A as Auth/2FA Microservice
+    participant D as PostgreSQL
+    participant M as MongoDB
+    participant K as Kafka
+
+    Note over U,K: Useri është i loguar dhe ka 2FA aktiv
+
+    U->>F: Klikon "Çaktivizo 2FA"
+    F->>U: Shfaq modal/form për password
+    U->>F: Fut password-in aktual
+
+    F->>A: POST /auth/2fa/disable {password}, Bearer accessToken
+    activate A
+    A->>A: Verifikon accessToken nga requireAuth
+
+    alt Token invalid / mungon
+        A-->>F: 401 Unauthorized
+        F-->>U: Kërko login përsëri
+    else Token valid
+        A->>D: SELECT user by userId nga token
+        activate D
+        D-->>A: User / null
+        deactivate D
+
+        alt User nuk ekziston
+            A-->>F: 404 User nuk u gjet
+            F-->>U: Trego gabim
+        else User ekziston
+            A->>A: Kontrollon nëse 2FA është aktiv
+
+            alt 2FA nuk është aktiv
+                A-->>F: 400 2FA nuk është aktiv
+                F-->>U: Trego "2FA është tashmë i çaktivizuar"
+            else 2FA është aktiv
+                A->>A: Verifikon password-in me hash-in e ruajtur
+
+                alt Password gabim
+                    A->>M: INSERT audit log për tentativë të dështuar disable 2FA
+                    activate M
+                    M-->>A: Audit log u ruajt
+                    deactivate M
+                    A-->>F: 401 Password i gabuar
+                    F-->>U: Trego "Password i gabuar"
+                else Password saktë
+                    A->>D: UPDATE user SET twoFactorEnabled=false, twoFactorSecret=null
+                    activate D
+                    D-->>A: User u përditësua
+                    deactivate D
+                    A->>M: INSERT audit log për disable 2FA success
+                    activate M
+                    M-->>A: Audit log u ruajt
+                    deactivate M
+                    A->>K: Publish event user.2fa_disabled
+                    activate K
+                    K-->>A: Event accepted
+                    deactivate K
+                    A-->>F: 200 {message: "2FA u çaktivizua me sukses"}
+                    F-->>U: Trego "2FA u çaktivizua"
+                end
+            end
+        end
+    end
+    deactivate A

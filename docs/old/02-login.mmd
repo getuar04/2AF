@@ -1,0 +1,32 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant F as Frontend
+    participant A as Auth Service
+    participant D as PostgreSQL
+    participant C as Redis
+    participant M as MongoDB
+    participant K as Kafka
+
+    U->>F: Fut emailin dhe passwordin
+    F->>A: POST /auth/login
+    A->>D: Gjej userin me email
+    D-->>A: User / null
+
+    alt User nuk ekziston ose password gabim
+        A-->>F: 401 Kredenciale të gabuara
+        F-->>U: Trego gabimin
+    else Password i saktë dhe 2FA joaktiv
+        A->>A: Krijo accessToken (15 min)
+        A->>A: Krijo refreshToken (7 ditë)
+        A->>M: Regjistro login sukses
+        A->>K: Publiko user.logged_in
+        A-->>F: 200 accessToken + Cookie refreshToken
+        F-->>U: Hyr në dashboard
+    else Password i saktë dhe 2FA aktiv
+        A->>A: Krijo challengeId
+        A->>C: Ruaj challengeId (300 sekonda)
+        C-->>A: OK
+        A-->>F: 202 Kërkohet kodi 2FA
+        F-->>U: Shfaq fushën për kodin 6-shifror
+    end

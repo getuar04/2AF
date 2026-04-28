@@ -1,0 +1,112 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant F as Frontend
+    participant A as Auth/2FA Microservice
+    participant D as PostgreSQL
+    participant C as Redis
+    participant M as MongoDB
+    participant K as Kafka
+    participant G as Google Authenticator
+
+    Note over U,G: Useri është regjistruar dhe ka 2FA aktiv
+
+    U->>F: Fut email dhe password
+    F->>A: POST /auth/login {email, password}
+    activate A
+    A->>D: SELECT user by email
+    activate D
+    D-->>A: User / null
+    deactivate D
+
+    alt Email/password gabim
+        A-->>F: 401 Kredencialet janë gabim
+        F-->>U: Trego gabim login
+    else User ekziston dhe password është saktë
+        A->>A: Kontrollon nëse 2FA është aktiv
+
+        alt 2FA nuk është aktiv
+            A->>K: Publish event user.logged_in
+            activate K
+            K-->>A: Event accepted
+            deactivate K
+            A->>M: INSERT audit log login success
+            activate M
+            M-->>A: Audit log u ruajt
+            deactivate M
+            A-->>F: 200 {accessToken, refreshToken, user}
+            F-->>U: Hyr në dashboard
+        else 2FA është aktiv
+            A->>C: SET challengeId + userId + email me TTL 300 sekonda
+            activate C
+            C-->>A: OK
+            deactivate C
+            A->>M: INSERT audit log login requires 2FA
+            activate M
+            M-->>A: Audit log u ruajt
+            deactivate M
+            A-->>F: 202 {challengeId, email, requiresTwoFactor: true}
+            F-->>U: Shfaq fushën për kodin 6-shifror
+        end
+    end
+    deactivate A
+
+    Note over U,G: Useri merr kodin nga Google Authenticator
+
+    U->>G: Hap Google Authenticator
+    activate G
+    G-->>U: Gjeneron kodin 6-shifror
+    deactivate G
+
+    U->>F: Fut kodin 6-shifror
+    F->>A: POST /auth/login/2fa {email, challengeId, code}
+    activate A
+    A->>C: GET challengeId nga Redis
+    activate C
+    C-->>A: Challenge / null
+    deactivate C
+
+    alt Challenge skadoi ose nuk ekziston
+        A-->>F: 400 Challenge skadoi
+        F-->>U: Logohu përsëri
+    else Challenge u gjet
+        A->>A: Kontrollon nëse email përputhet me challenge
+
+        alt Email nuk përputhet
+            A-->>F: 400 Email nuk përputhet
+            F-->>U: Trego gabimin
+        else Email përputhet
+            A->>D: SELECT twoFactorSecret by userId
+            activate D
+            D-->>A: Secret key / null
+            deactivate D
+
+            alt 2FA secret mungon
+                A-->>F: 400 2FA nuk është konfiguruar saktë
+                F-->>U: Kërko setup 2FA përsëri
+            else Secret key ekziston
+                A->>A: Verifikon TOTP code
+
+                alt Kodi gabim
+                    A-->>F: 401 Kod i gabuar
+                    F-->>U: Provo përsëri
+                else Kodi saktë
+                    A->>C: DELETE challengeId nga Redis
+                    activate C
+                    C-->>A: U fshi
+                    deactivate C
+                    A->>M: INSERT audit log për 2FA verification success
+                    activate M
+                    M-->>A: Audit log u ruajt
+                    deactivate M
+                    A->>K: Publish event user.logged_in / user.2fa_verified
+                    activate K
+                    K-->>A: Event accepted
+                    deactivate K
+                    A-->>F: 200 {accessToken, refreshToken, user}
+                    F-->>U: Hyr në dashboard
+                end
+            end
+        end
+    end
+    deactivate A

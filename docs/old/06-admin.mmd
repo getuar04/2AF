@@ -1,0 +1,44 @@
+sequenceDiagram
+    autonumber
+    actor A as Admin
+    participant F as Frontend
+    participant S as Auth Service
+    participant M as MongoDB
+    participant C as Redis
+
+    Note over A,C: Audit Logs — GET /admin/audit-logs
+
+    A->>F: Hap panelin e adminit
+    F->>S: GET /admin/audit-logs (Bearer token)
+    S->>S: Verifiko tokenin dhe rolin
+
+    alt Jo i autentikuar
+        S-->>F: 401 Pa leje
+        F-->>A: Ridrejto te login
+    else Nuk është admin
+        S-->>F: 403 E ndaluar
+        F-->>A: Trego gabimin
+    else Admin i vlefshëm
+        S->>M: Merr logs me filtra dhe paginim
+        M-->>S: Lista e logs
+        S-->>F: 200 {items, total, page, limit}
+        F-->>A: Shfaq tabelën e logs
+    end
+
+    Note over A,C: Debug Redis — GET /admin/debug/redis/health
+
+    A->>F: Kliko "Kontrollo Redis"
+    F->>S: GET /admin/debug/redis/health (Bearer token)
+    S->>C: Testo SET + GET + DELETE
+    C-->>S: OK
+    S-->>F: 200 {status: ok, connected: true}
+    F-->>A: Redis funksionon
+
+    Note over A,C: Debug Cache — Kontrollo Challenge dhe 2FA Setup
+
+    A->>F: Kërko challenge ose 2FA setup
+    F->>S: GET /admin/debug/login-challenge/{id}
+    S->>C: Kontrollo nëse ekziston në Redis
+    C-->>S: Vlera / null
+    S-->>F: 200 {exists, ttlSeconds}
+    F-->>A: Trego statusin e cache

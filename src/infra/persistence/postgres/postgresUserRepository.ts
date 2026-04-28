@@ -41,6 +41,13 @@ export class PostgresUserRepository implements UserRepository {
     );
   }
 
+  async disableTwoFactor(userId: string): Promise<void> {
+    await getPostgresPool().query(
+      `UPDATE users SET is_two_factor_enabled = false, two_factor_secret = NULL, updated_at = NOW() WHERE id = $1`,
+      [userId]
+    );
+  }
+
   private map(row: UserRow): User {
     return {
       id: row.id,

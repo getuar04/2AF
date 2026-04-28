@@ -17,30 +17,15 @@ spec:
         - name: wait-for-postgres
           image: busybox
           imagePullPolicy: IfNotPresent
-          command:
-            [
-              "/bin/sh",
-              "-c",
-              "until nc -z postgres-service 5432; do sleep 2; done",
-            ]
+          command: ["/bin/sh", "-c", "until nc -z postgres-service 5432; do sleep 2; done"]
         - name: wait-for-redis
           image: busybox
           imagePullPolicy: IfNotPresent
-          command:
-            [
-              "/bin/sh",
-              "-c",
-              "until nc -z redis-service 6379; do sleep 2; done",
-            ]
+          command: ["/bin/sh", "-c", "until nc -z redis-service 6379; do sleep 2; done"]
         - name: wait-for-mongodb
           image: busybox
           imagePullPolicy: IfNotPresent
-          command:
-            [
-              "/bin/sh",
-              "-c",
-              "until nc -z mongodb-service 27017; do sleep 2; done",
-            ]
+          command: ["/bin/sh", "-c", "until nc -z mongodb-service 27017; do sleep 2; done"]
       containers:
         - name: auth-service
           image: 2af-auth-service:latest
@@ -89,9 +74,9 @@ spec:
                   name: auth-secrets
                   key: REDIS_PASSWORD
             - name: POSTGRES_URL
-              value: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-service:5432/2af
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-service:5432/2af"
             - name: REDIS_URL
-              value: redis://:$(REDIS_PASSWORD)@redis-service:6379
+              value: "redis://:$(REDIS_PASSWORD)@redis-service:6379"
           readinessProbe:
             httpGet:
               path: /health

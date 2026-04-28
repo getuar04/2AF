@@ -1,0 +1,58 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant F as Frontend
+    participant AR as Login Microservice
+    participant A as 2FA Microservice
+    participant D as PostgreSQL
+    participant C as Redis
+    participant M as MongoDB
+    participant K as Kafka
+    participant G as Google Authenticator
+
+    Note over U,G: Useri është regjistruar dhe ka 2FA aktiv
+
+    U->>F: Fut email dhe password
+    F->>AR: POST /auth/login
+    AR->>C: Ruaj challengeId + userId + email (300 sekonda)
+    C-->>AR: OK
+    AR-->>F: 202 {challengeId, email} — kërkohet verifikimi 2FA
+    F-->>U: Shfaq fushën për kodin 6-shifror
+
+    Note over U,G: Useri hap Google Authenticator
+
+    U->>G: Hap Google Authenticator
+    G-->>U: Gjeneron kodin 6-shifror
+
+    U->>F: Fut kodin 6-shifror
+    F->>A: POST /auth/login/2fa {email, challengeId, code}
+    A->>C: Merr challengeId nga Redis
+    C-->>A: Challenge / null
+
+    alt Challenge skadoi pas 300 sekondave
+        A-->>F: 400 Challenge skadoi
+        F-->>U: Logohu sërisht
+    else Challenge u gjet
+        A->>A: Kontrollo email përputhet me challengeId
+        alt Email nuk përputhet
+            A-->>F: 400 Email nuk përputhet
+            F-->>U: Trego gabimin
+        else Email përputhet
+            A->>D: Gjej secret key TOTP të userit
+            D-->>A: Secret key
+            A->>A: Verifiko kodin TOTP
+            alt Kodi gabim
+                A-->>F: 401 Kod i gabuar
+                F-->>U: Provo sërisht
+            else Kodi saktë
+                A->>C: Fshi challengeId nga Redis
+                C-->>A: U fshi
+                A->>M: Regjistro verifikim 2FA me sukses
+                A->>K: Publiko user.2fa_verified
+                A-->>F: 200 Verifikimi kaloi
+                F-->>AR: Konfirmo login të plotë
+                AR-->>F: accessToken + refreshToken
+                F-->>U: Hyr në dashboard
+            end
+        end
+    end

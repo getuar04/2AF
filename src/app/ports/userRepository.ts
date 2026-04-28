@@ -18,4 +18,5 @@ export interface UserRepository {
   findByEmail(email: string): Promise<User | null>;
   create(input: CreateUserInput): Promise<User>;
   enableTwoFactor(input: EnableUserTwoFactorInput): Promise<void>;
+  disableTwoFactor(userId: string): Promise<void>;
 }

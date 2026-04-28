@@ -1,0 +1,47 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant F as Frontend
+    participant A as Auth Service
+    participant D as PostgreSQL
+    participant C as Redis
+    participant M as MongoDB
+    participant K as Kafka
+        participant G as Google Authenticator
+
+    Note over U,G: Vazhdon pas Login që ktheu 202 REQUIRE_2FA
+
+    U->>G: Hap aplikacionin
+    G-->>U: Gjeneron kodin 6-shifror
+
+    U->>F: Fut kodin 6-shifror
+    F->>A: POST /auth/login/2fa (email + challengeId + kod)
+    A->>C: Merr challengeId nga Redis
+    C-->>A: Challenge / null
+
+    alt Challenge skadoi (pas 300 sekondave)
+        A-->>F: 400 Challenge skadoi
+        F-->>U: Logohu sërisht
+    else Challenge u gjet
+        A->>A: Kontrollo email përputhet
+        alt Email nuk përputhet
+            A-->>F: 400 Email nuk përputhet
+            F-->>U: Trego gabimin
+        else Email përputhet
+            A->>D: Gjej userin dhe secretin TOTP
+            D-->>A: User me secret
+            A->>A: Verifiko kodin TOTP
+            alt Kodi gabim
+                A-->>F: 401 Kod i gabuar
+                F-->>U: Provo sërisht
+            else Kodi saktë
+                A->>A: Krijo accessToken (15 min)
+                A->>A: Krijo refreshToken (7 ditë)
+                A->>C: Fshi challengeId nga Redis
+                A->>M: Regjistro login 2FA sukses
+                A->>K: Publiko user.logged_in (viaTwoFactor: true)
+                A-->>F: 200 accessToken + Cookie refreshToken
+                F-->>U: Hyr në dashboard
+            end
+        end
+    end

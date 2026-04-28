@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant F as Frontend
+    participant A as Auth Service
+    participant D as PostgreSQL
+    participant M as MongoDB
+    participant K as Kafka
+
+    U->>F: Fut emrin, emailin, passwordin
+    F->>A: POST /auth/register
+    A->>A: Valido të dhënat
+
+    alt Validim dështoi
+        A-->>F: 400 Gabim validimi
+        F-->>U: Trego gabimin
+    else Validim kaloi
+        A->>D: A ekziston ky email?
+        D-->>A: Po / Jo
+
+        alt Email ekziston
+            A->>M: Regjistro dështim
+            A-->>F: 409 Email ekziston
+            F-->>U: Trego gabimin
+        else Email i lirë
+            A->>A: Hash password
+            A->>A: Cakto rolin (user/admin)
+            A->>D: Krijo userin
+            D-->>A: U krijua
+            A->>M: Regjistro sukses
+            A->>K: Publiko user.registered
+            A-->>F: 201 Useri u krijua
+            F-->>U: Llogaria u hap
+        end
+    end

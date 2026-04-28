@@ -1,0 +1,53 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant F as Frontend
+    participant A as Auth Service
+    participant D as PostgreSQL
+    participant C as Redis
+    participant M as MongoDB
+    participant K as Kafka
+    participant G as Google Authenticator
+
+    Note over U,G: Hapi 1 — Fillo setup 2FA
+
+    U->>F: Kliko "Aktivizo 2FA"
+    F->>A: POST /auth/2fa/init 
+    A->>D: Gjej userin
+    D-->>A: User u gjet
+    A->>A: Krijo TOTP secret dhe QR code
+    A->>A: Krijo setupToken
+    A->>C: Ruaj secretin përkohësisht (300 sekonda)
+    C-->>A: OK
+    A->>M: Regjistro init 2FA
+    A-->>F: 200 QR code + setupToken
+    F-->>U: Shfaq QR code
+
+    Note over U,G: Hapi 2 — Skano dhe Konfirmo
+
+    U->>G: Skano QR code
+    G-->>U: Gjeneron kodin 6-shifror
+
+    U->>F: Fut kodin 6-shifror
+    F->>A: POST /auth/2fa/confirm (kod + setupToken)
+    A->>C: Merr secretin nga cache
+    C-->>A: Secret / null
+
+    alt Cache skadoi (pas 300 sekondave)
+        A-->>F: 400 Sesioni skadoi
+        F-->>U: Fillo setup sërisht
+    else Secret u gjet
+        A->>A: Verifiko kodin TOTP
+        alt Kodi gabim
+            A-->>F: 401 Kod i gabuar
+            F-->>U: Provo sërisht
+        else Kodi saktë
+            A->>D: Ruaj secretin permanent
+            D-->>A: U ruajt
+            A->>C: Fshi secretin nga cache
+            A->>M: Regjistro aktivizim 2FA
+            A->>K: Publiko user.two_factor_enabled
+            A-->>F: 200 2FA u aktivizua
+            F-->>U: 2FA është aktiv
+        end
+    end

@@ -1,0 +1,64 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant F as Frontend
+    participant A as 2FA Microservice 
+    participant D as PostgreSQL
+    participant C as Redis
+    participant M as MongoDB
+    participant K as Kafka
+    participant G as Google Authenticator
+
+    Note over U,K: Useri është tashmë i regjistruar dhe i loguar
+
+    U->>F: Klikon butonin "Aktivizo 2FA"
+    F->>A: POST /auth/2fa/init {userId}
+    A->>D: Gjej userin me userId
+    D-->>A: User u gjet
+
+    alt 2FA është tashmë aktiv
+        A-->>F: 400 2FA është tashmë aktiv
+        F-->>U: Trego mesazhin
+    else 2FA joaktiv
+        A->>A: Gjenero TOTP secret key
+        A->>A: Krijo QR code nga secret key
+        A->>A: Krijo setupToken
+        A->>C: Ruaj secret key përkohësisht (300 sekonda)
+        C-->>A: OK
+        A->>M: Regjistro fillim setup 2FA
+        A->>K: Publiko user.2fa_init
+        A-->>F: 200 {qrCodeDataUrl, manualEntryKey, setupToken}
+        F-->>U: Shfaq QR code dhe string manual
+    end
+
+    Note over U,G: Useri skanon QR code me Google Authenticator
+
+    U->>G: Skano QR code ose fut string manual
+    G-->>U: Fillon gjenerimin e kodit 6-shifror çdo 30 sekonda
+
+    Note over U,K: Konfirmimi i 2FA
+
+    U->>F: Fut kodin 6-shifror
+    F->>A: POST /auth/2fa/confirm {userId, code, setupToken}
+    A->>C: Merr secret key nga cache me userId + setupToken
+    C-->>A: Secret key / null
+
+    alt Cache skadoi pas 300 sekondave
+        A-->>F: 400 Sesioni skadoi
+        F-->>U: Fillo setup sërisht
+    else Secret key u gjet
+        A->>A: Verifiko kodin TOTP me secret key
+        alt Kodi gabim
+            A-->>F: 401 Kod i gabuar
+            F-->>U: Provo sërisht
+        else Kodi saktë
+            A->>D: Ruaj secret key permanent në databazë
+            D-->>A: U ruajt
+            A->>C: Fshi secret key nga cache
+            C-->>A: U fshi
+            A->>M: Regjistro aktivizim 2FA me sukses
+            A->>K: Publiko user.2fa_enabled
+            A-->>F: 200 2FA u aktivizua me sukses
+            F-->>U: 2FA është aktiv
+        end
+    end

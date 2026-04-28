@@ -5,6 +5,7 @@ import { LogoutUser } from "../../../app/usecases/logoutUser";
 import { RegisterUser } from "../../../app/usecases/registerUser";
 import { VerifyLoginTwoFactor } from "../../../app/usecases/verifyLoginTwoFactor";
 import { RefreshToken } from "../../../app/usecases/refreshToken";
+import { DisableTwoFactor } from "../../../app/usecases/disableTwoFactor";
 import { TokenPayload } from "../../../app/ports/tokenProvider";
 
 const REFRESH_TOKEN_COOKIE = "refreshToken";
@@ -20,6 +21,7 @@ export class AuthController {
   constructor(
     private readonly registerUserUseCase: RegisterUser,
     private readonly enableTwoFactorUseCase: EnableTwoFactor,
+    private readonly disableTwoFactorUseCase: DisableTwoFactor,
     private readonly loginUserUseCase: LoginUser,
     private readonly verifyLoginTwoFactorUseCase: VerifyLoginTwoFactor,
     private readonly refreshTokenUseCase: RefreshToken,
@@ -111,27 +113,37 @@ export class AuthController {
     }
   };
 
-  refresh = async (
+  refresh = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    // Lexo refreshToken nga cookie OSE nga body
+    const refreshToken = req.cookies?.[REFRESH_TOKEN_COOKIE] || req.body?.refreshToken;
+    if (!refreshToken) {
+      res.status(401).json({ error: { message: "Refresh token missing", code: "REFRESH_TOKEN_MISSING" } });
+      return;
+    }
+
+    const result = await this.refreshTokenUseCase.execute(refreshToken);
+
+    // Refresh Token Rotation — vendos refreshToken-in e ri në cookie
+    res.cookie(REFRESH_TOKEN_COOKIE, result.newRefreshToken, COOKIE_OPTIONS);
+
+    res.status(200).json({ accessToken: result.accessToken });
+  } catch (error) {
+    next(error);
+  }
+};
+
+  disableTwoFactor = async (
     req: Request,
     res: Response,
     next: NextFunction,
   ): Promise<void> => {
     try {
-      // Lexo refreshToken nga cookie
-      const refreshToken = req.cookies?.[REFRESH_TOKEN_COOKIE];
-      if (!refreshToken) {
-        res
-          .status(401)
-          .json({
-            error: {
-              message: "Refresh token missing",
-              code: "REFRESH_TOKEN_MISSING",
-            },
-          });
-        return;
-      }
-
-      const result = await this.refreshTokenUseCase.execute(refreshToken);
+      const user = (req as Request & { user?: TokenPayload }).user;
+      const result = await this.disableTwoFactorUseCase.execute({
+        ...req.body,
+        userId: user!.userId,
+      });
       res.status(200).json(result);
     } catch (error) {
       next(error);

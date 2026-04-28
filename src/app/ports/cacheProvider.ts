@@ -6,4 +6,5 @@ export interface CacheProvider {
   set(key: string, value: string, options: CacheSetOptions): Promise<void>;
   get(key: string): Promise<string | null>;
   delete(key: string): Promise<void>;
+  deleteByPrefix(prefix: string): Promise<void>;
 }

@@ -12,6 +12,7 @@ describe("RegisterUser - error cases", () => {
     findByEmail: jest.fn(),
     create: jest.fn(),
     enableTwoFactor: jest.fn(),
+disableTwoFactor: jest.fn(),
   };
 
   const mockPasswordHasher: jest.Mocked<PasswordHasher> = {

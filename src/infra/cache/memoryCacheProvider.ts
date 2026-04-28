@@ -1,12 +1,22 @@
 import { CacheProvider, CacheSetOptions } from "../../app/ports/cacheProvider";
 
-interface CacheEntry { value: string; expiresAt: number; }
+interface CacheEntry {
+  value: string;
+  expiresAt: number;
+}
 
 export class MemoryCacheProvider implements CacheProvider {
   private readonly store = new Map<string, CacheEntry>();
 
-  async set(key: string, value: string, options: CacheSetOptions): Promise<void> {
-    this.store.set(key, { value, expiresAt: Date.now() + options.ttlSeconds * 1000 });
+  async set(
+    key: string,
+    value: string,
+    options: CacheSetOptions,
+  ): Promise<void> {
+    this.store.set(key, {
+      value,
+      expiresAt: Date.now() + options.ttlSeconds * 1000,
+    });
   }
 
   async get(key: string): Promise<string | null> {
@@ -21,5 +31,13 @@ export class MemoryCacheProvider implements CacheProvider {
 
   async delete(key: string): Promise<void> {
     this.store.delete(key);
+  }
+
+  async deleteByPrefix(prefix: string): Promise<void> {
+    for (const key of this.store.keys()) {
+      if (key.startsWith(prefix)) {
+        this.store.delete(key);
+      }
+    }
   }
 }

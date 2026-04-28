@@ -1,0 +1,53 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant F as Frontend
+    participant A as 2FA Microservice
+    participant D as PostgreSQL
+    participant M as MongoDB
+    participant K as Kafka
+
+    Note over U,K: Useri është i loguar dhe ka 2FA aktiv
+
+    U->>F: Klikon "Çaktivizo 2FA"
+    F->>U: Shfaq modal/form për password
+    U->>F: Fut password-in aktual
+
+    F->>A: POST /auth/2fa/disable {password}, Bearer accessToken
+
+
+    A->>A: Verifikon accessToken
+
+    alt Token valid
+        A->>D: Gjej userin nga userId në token
+        D-->>A: User
+
+        alt User nuk ekziston
+            A-->>F: 404 User nuk u gjet
+            F-->>U: Trego gabim
+        else User ekziston
+            A->>A: Kontrollo nëse 2FA është aktiv
+
+            alt 2FA nuk është aktiv
+                A-->>F: 400 2FA nuk është aktiv
+                F-->>U: Trego "2FA është tashmë i çaktivizuar"
+            else 2FA është aktiv
+                A->>A: Verifiko password-in me hash-in në databazë
+
+                alt Password gabim
+                    A->>M: Regjistro tentativë të dështuar disable 2FA
+                    A-->>F: 401 Password i gabuar
+                    F-->>U: Trego "Password i gabuar"
+                else Password saktë
+                    A->>D: Hiq/zbraz twoFactorSecret dhe çaktivizo twoFactorEnabled
+                    D-->>A: U përditësua
+
+                    A->>M: Regjistro disable 2FA me sukses
+                    A->>K: Publiko user.2fa_disabled
+
+                    A-->>F: 200 2FA u çaktivizua me sukses
+                    F-->>U: Trego "2FA u çaktivizua"
+                end
+            end
+        end
+    end

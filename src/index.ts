@@ -1,12 +1,11 @@
-import express from "express";
 import { env } from "./infra/config/env";
-import authRoutes from "./infra/http/routes/auth";
-import adminRoutes from "./infra/http/routes/admin";
-import { errorHandler } from "./infra/http/middlewares/errorHandler";
+import { createApp } from "./app";
 import { connectRedis, disconnectRedis } from "./infra/cache/redisClient";
 import { connectPostgres, disconnectPostgres } from "./infra/persistence/postgres/postgresClient";
 import { disconnectMongo, getMongoDatabase } from "./infra/persistence/mongodb/mongoClient";
 import { disconnectKafka, getKafkaProducer } from "./infra/messaging/kafkaClient";
+import { startKafkaConsumer, disconnectKafkaConsumer } from "./infra/messaging/kafkaConsumer";
+import { registerAuthEventHandlers } from "./infra/messaging/authEventHandlers";
 
 async function bootstrap(): Promise<void> {
   if (env.app.runtimeMode !== "memory") {
@@ -17,6 +16,9 @@ async function bootstrap(): Promise<void> {
     if (env.kafka.enabled) {
       try {
         await getKafkaProducer();
+        // Consumer — dëgjo eventet e auth
+        registerAuthEventHandlers();
+        await startKafkaConsumer(`${env.kafka.clientId}-group`);
       } catch (error) {
         console.error("Kafka connection failed during bootstrap:", error);
         if (env.app.nodeEnv === "production") {
@@ -26,22 +28,8 @@ async function bootstrap(): Promise<void> {
     }
   }
 
-  const app = express();
-  app.use(express.json());
-
-  app.get("/health", (_req, res) => {
-    res.status(200).json({
-      status: "ok",
-      service: "authentication-service",
-      environment: env.app.nodeEnv,
-      runtimeMode: env.app.runtimeMode,
-      kafkaEnabled: env.kafka.enabled,
-    });
-  });
-
-  app.use("/auth", authRoutes);
-  app.use("/admin", adminRoutes);
-  app.use(errorHandler);
+  // createApp() nga app.ts — ka cookieParser, json limit, të gjitha middleware
+  const app = createApp();
 
   const server = app.listen(env.app.port, () => {
     console.log(`Authentication Service running on port ${env.app.port} in ${env.app.runtimeMode} mode`);
@@ -52,6 +40,7 @@ async function bootstrap(): Promise<void> {
     server.close(async () => {
       try {
         if (env.app.runtimeMode !== "memory") {
+          await disconnectKafkaConsumer();
           await disconnectKafka();
           await disconnectMongo();
           await disconnectRedis();

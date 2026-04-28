@@ -1,5 +1,6 @@
 import { RefreshTokenOutputDto } from "../dtos/authDtos";
 import { AuthAuditRepository } from "../ports/authAuditRepository";
+import { CacheProvider } from "../ports/cacheProvider";
 import { IdGenerator } from "../ports/idGenerator";
 import { TokenProvider } from "../ports/tokenProvider";
 import { UserRepository } from "../ports/userRepository";
@@ -11,12 +12,31 @@ export class RefreshToken {
     private readonly tokenProvider: TokenProvider,
     private readonly userRepository: UserRepository,
     private readonly authAuditRepository: AuthAuditRepository,
-    private readonly idGenerator: IdGenerator
+    private readonly idGenerator: IdGenerator,
+    private readonly cacheProvider: CacheProvider,
+    private readonly refreshTokenTtlSeconds: number = 7 * 24 * 60 * 60, // 7 ditë
   ) {}
 
-  async execute(refreshToken: string): Promise<RefreshTokenOutputDto> {
+  async execute(
+    refreshToken: string,
+  ): Promise<RefreshTokenOutputDto & { newRefreshToken: string }> {
     if (!refreshToken) {
-      throw new AppError("Refresh token is required", 400, "REFRESH_TOKEN_REQUIRED");
+      throw new AppError(
+        "Refresh token is required",
+        400,
+        "REFRESH_TOKEN_REQUIRED",
+      );
+    }
+
+    // Kontrollo nëse refreshToken është në blacklist (i përdorur më parë)
+    const blacklistKey = `auth:refresh:blacklist:${refreshToken}`;
+    const isBlacklisted = await this.cacheProvider.get(blacklistKey);
+    if (isBlacklisted) {
+      throw new AppError(
+        "Refresh token has already been used",
+        401,
+        "REFRESH_TOKEN_REUSED",
+      );
     }
 
     const payload = await this.tokenProvider.verifyRefreshToken(refreshToken);
@@ -26,10 +46,23 @@ export class RefreshToken {
       throw new AppError("User not found", 404, "USER_NOT_FOUND");
     }
 
+    // Gjenero accessToken të ri
     const accessToken = await this.tokenProvider.generateAccessToken({
       userId: user.id,
       email: user.email,
-      role: user.role
+      role: user.role,
+    });
+
+    // Gjenero refreshToken të ri (Refresh Token Rotation)
+    const newRefreshToken = await this.tokenProvider.generateRefreshToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    // Vendos refreshToken-in e vjetër në blacklist
+    await this.cacheProvider.set(blacklistKey, "1", {
+      ttlSeconds: this.refreshTokenTtlSeconds,
     });
 
     await this.authAuditRepository.create({
@@ -38,10 +71,10 @@ export class RefreshToken {
       email: user.email,
       action: "REFRESH_TOKEN",
       status: "SUCCESS",
-      metadata: AuditService.buildMetadata({ role: user.role }),
-      createdAt: new Date()
+      metadata: AuditService.buildMetadata({ role: user.role, rotation: true }),
+      createdAt: new Date(),
     });
 
-    return { accessToken };
+    return { accessToken, newRefreshToken };
   }
 }

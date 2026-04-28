@@ -1,0 +1,110 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant F as Frontend
+    participant A as 2FA/Auth Microservice
+    participant D as PostgreSQL
+    participant C as Redis
+    participant M as MongoDB
+    participant K as Kafka
+    participant G as Google Authenticator
+
+    Note over U,K: Useri është i regjistruar dhe i loguar me accessToken valid
+
+    U->>F: Klikon butonin "Aktivizo 2FA"
+    F->>A: POST /auth/2fa/init {userId}, Bearer accessToken
+    activate A
+    A->>A: Verifikon accessToken nga requireAuth
+
+    alt Token invalid / mungon
+        A-->>F: 401 Unauthorized
+        F-->>U: Kërko login përsëri
+    else Token valid
+        A->>D: SELECT user by userId
+        activate D
+        D-->>A: User / null
+        deactivate D
+
+        alt User nuk ekziston
+            A-->>F: 404 User nuk u gjet
+            F-->>U: Trego mesazhin e gabimit
+        else 2FA është tashmë aktiv
+            A-->>F: 400 2FA është tashmë aktiv
+            F-->>U: Trego mesazhin
+        else 2FA joaktiv
+            A->>A: Gjeneron TOTP secret key
+            A->>A: Krijon QR code data URL nga secret key
+            A->>A: Krijon setupToken
+            A->>C: SET setupToken + secret key me TTL 300 sekonda
+            activate C
+            C-->>A: OK
+            deactivate C
+            A->>M: INSERT audit log për fillim setup 2FA
+            activate M
+            M-->>A: Audit log u ruajt
+            deactivate M
+            A->>K: Publish event user.2fa_init
+            activate K
+            K-->>A: Event accepted
+            deactivate K
+            A-->>F: 200 {qrCodeDataUrl, manualEntryKey, setupToken}
+            F-->>U: Shfaq QR code dhe manual key
+        end
+    end
+    deactivate A
+
+    Note over U,G: Useri skanon QR code me Google Authenticator
+
+    U->>G: Skano QR code ose fut manual key
+    activate G
+    G-->>U: Gjeneron kod 6-shifror çdo 30 sekonda
+    deactivate G
+
+    Note over U,K: Konfirmimi i 2FA
+
+    U->>F: Fut kodin 6-shifror
+    F->>A: POST /auth/2fa/confirm {code, setupToken}, Bearer accessToken
+    activate A
+    A->>A: Verifikon accessToken nga requireAuth
+
+    alt Token invalid / mungon
+        A-->>F: 401 Unauthorized
+        F-->>U: Kërko login përsëri
+    else Token valid
+        A->>C: GET secret key nga Redis me userId + setupToken
+        activate C
+        C-->>A: Secret key / null
+        deactivate C
+
+        alt Setup session skadoi ose setupToken invalid
+            A-->>F: 400 Setup session skadoi
+            F-->>U: Fillo setup përsëri
+        else Secret key u gjet
+            A->>A: Verifikon TOTP code me secret key
+
+            alt Kodi gabim
+                A-->>F: 401 Kod i gabuar
+                F-->>U: Provo përsëri
+            else Kodi saktë
+                A->>D: UPDATE user SET twoFactorEnabled=true, twoFactorSecret=secret
+                activate D
+                D-->>A: User u përditësua
+                deactivate D
+                A->>C: DELETE setupToken nga Redis
+                activate C
+                C-->>A: U fshi
+                deactivate C
+                A->>M: INSERT audit log për aktivizim 2FA
+                activate M
+                M-->>A: Audit log u ruajt
+                deactivate M
+                A->>K: Publish event user.2fa_enabled
+                activate K
+                K-->>A: Event accepted
+                deactivate K
+                A-->>F: 200 {message: "2FA u aktivizua me sukses"}
+                F-->>U: 2FA është aktiv
+            end
+        end
+    end
+    deactivate A

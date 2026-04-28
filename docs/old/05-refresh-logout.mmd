@@ -1,0 +1,43 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant F as Frontend
+    participant A as Auth Service
+    participant D as PostgreSQL
+    participant C as Redis
+    participant M as MongoDB
+
+    Note over U,M: Rinovim Token — POST /auth/refresh
+
+    U->>F: AccessToken skadoi (pas 15 minutave)
+    F->>A: POST /auth/refresh (Cookie: refreshToken)
+    A->>A: Lexo refreshToken nga cookie
+
+    alt Cookie mungon
+        A-->>F: 401 Token mungon
+        F-->>U: Logohu sërisht
+    else Cookie ekziston
+        A->>A: Verifiko refreshToken
+        alt RefreshToken i pavlefshëm
+            A-->>F: 401 Token i pavlefshëm
+            F-->>U: Logohu sërisht
+        else RefreshToken i vlefshëm
+            A->>D: Gjej userin
+            D-->>A: User u gjet
+            A->>A: Krijo accessToken të ri (15 min)
+            A->>M: Regjistro rinovim
+            A-->>F: 200 accessToken i ri
+            F-->>U: Vazhdo sesionin
+        end
+    end
+
+    Note over U,M: Logout — POST /auth/logout
+
+    U->>F: Kliko "Dil"
+    F->>A: POST /auth/logout (Bearer token)
+    A->>A: Verifiko tokenin
+    A->>C: Vendos tokenin në blacklist (900 sekonda)
+    C-->>A: OK
+    A->>M: Regjistro logout
+    A-->>F: 200 U dil + Cookie fshihet
+    F-->>U: Ridrejto te login

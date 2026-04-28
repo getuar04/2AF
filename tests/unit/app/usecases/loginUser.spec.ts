@@ -13,6 +13,7 @@ describe("LoginUser", () => {
     findByEmail: jest.fn(),
     create: jest.fn(),
     enableTwoFactor: jest.fn(),
+disableTwoFactor: jest.fn(),
   };
   const mockPasswordHasher: jest.Mocked<PasswordHasher> = {
     hash: jest.fn(),
@@ -27,6 +28,7 @@ describe("LoginUser", () => {
     set: jest.fn(),
     get: jest.fn(),
     delete: jest.fn(),
+deleteByPrefix: jest.fn(),
   };
   const mockAuditRepository: jest.Mocked<AuthAuditRepository> = {
     create: jest.fn(),

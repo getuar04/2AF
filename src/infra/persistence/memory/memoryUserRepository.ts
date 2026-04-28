@@ -38,4 +38,12 @@ export class MemoryUserRepository implements UserRepository {
     user.isTwoFactorEnabled = true;
     user.updatedAt = new Date();
   }
+
+  async disableTwoFactor(userId: string): Promise<void> {
+    const user = this.users.get(userId);
+    if (!user) return;
+    user.twoFactorSecret = undefined;
+    user.isTwoFactorEnabled = false;
+    user.updatedAt = new Date();
+  }
 }

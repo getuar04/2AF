@@ -2,7 +2,11 @@ import { CacheProvider, CacheSetOptions } from "../../app/ports/cacheProvider";
 import { getRedisClient } from "./redisClient";
 
 export class RedisCacheProvider implements CacheProvider {
-  async set(key: string, value: string, options: CacheSetOptions): Promise<void> {
+  async set(
+    key: string,
+    value: string,
+    options: CacheSetOptions,
+  ): Promise<void> {
     const client = getRedisClient();
     await client.set(key, value, { EX: options.ttlSeconds });
   }
@@ -13,5 +17,13 @@ export class RedisCacheProvider implements CacheProvider {
 
   async delete(key: string): Promise<void> {
     await getRedisClient().del(key);
+  }
+
+  async deleteByPrefix(prefix: string): Promise<void> {
+    const client = getRedisClient();
+    const keys = await client.keys(`${prefix}*`);
+    if (keys.length > 0) {
+      await client.del(keys);
+    }
   }
 }
