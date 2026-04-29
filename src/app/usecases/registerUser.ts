@@ -16,10 +16,13 @@ export class RegisterUser {
     private readonly authAuditRepository: AuthAuditRepository,
     private readonly eventBus: EventBus,
     private readonly idGenerator: IdGenerator,
-    private readonly adminEmails: string[] = []
+    private readonly adminEmails: string[] = [],
   ) {}
 
-  async execute(input: RegisterUserInputDto): Promise<RegisterUserOutputDto> {
+  async execute(
+    input: RegisterUserInputDto,
+    requestInfo?: { ip?: string; userAgent?: string },
+  ): Promise<RegisterUserOutputDto> {
     const fullName = input.fullName.trim();
     const email = input.email.trim().toLowerCase();
     const password = input.password;
@@ -37,7 +40,7 @@ export class RegisterUser {
         status: "FAILED",
         reason: "EMAIL_ALREADY_EXISTS",
         metadata: AuditService.buildMetadata({ email }),
-        createdAt: new Date()
+        createdAt: new Date(),
       });
       throw new AppError("Email already exists", 409, "EMAIL_ALREADY_EXISTS");
     }
@@ -51,7 +54,7 @@ export class RegisterUser {
       fullName,
       email,
       passwordHash,
-      role
+      role,
     });
 
     await this.authAuditRepository.create({
@@ -60,8 +63,13 @@ export class RegisterUser {
       email: createdUser.email,
       action: "REGISTER",
       status: "SUCCESS",
-      metadata: AuditService.buildMetadata({ fullName: createdUser.fullName, role }),
-      createdAt: new Date()
+      metadata: AuditService.buildMetadata({
+        fullName: createdUser.fullName,
+        role,
+      }),
+      ip: requestInfo?.ip,
+      userAgent: requestInfo?.userAgent,
+      createdAt: new Date(),
     });
 
     const event: UserRegisteredEvent = {
@@ -70,8 +78,8 @@ export class RegisterUser {
         userId: createdUser.id,
         fullName: createdUser.fullName,
         email: createdUser.email,
-        createdAt: createdUser.createdAt.toISOString()
-      }
+        createdAt: createdUser.createdAt.toISOString(),
+      },
     };
 
     await this.eventBus.publish(event);
@@ -81,7 +89,7 @@ export class RegisterUser {
       fullName: createdUser.fullName,
       email: createdUser.email,
       role: createdUser.role,
-      isTwoFactorEnabled: createdUser.isTwoFactorEnabled
+      isTwoFactorEnabled: createdUser.isTwoFactorEnabled,
     };
   }
 }

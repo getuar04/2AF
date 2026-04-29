@@ -22,6 +22,7 @@ import { BcryptPasswordHasher } from "./infra/security/bcryptPasswordHasher";
 import { JwtTokenProvider } from "./infra/security/jwtTokenProvider";
 import { SpeakeasyTwoFactorProvider } from "./infra/security/speakeasyTwoFactorProvider";
 import { UuidGenerator } from "./infra/utils/uuidGenerator";
+import { LogoutAllDevices } from "./app/usecases/logoutAllDevices";
 
 const memoryMode = env.app.runtimeMode === "memory";
 
@@ -107,6 +108,12 @@ const logoutUserUseCase = new LogoutUser(
   900, // accessToken TTL sekonda (15 min)
 );
 
+const logoutAllDevicesUseCase = new LogoutAllDevices(
+  cacheProvider,
+  authAuditRepository,
+  idGenerator,
+);
+
 const getAuditLogsUseCase = new GetAuditLogs(authAuditRepository);
 
 export const authController = new AuthController(
@@ -117,6 +124,7 @@ export const authController = new AuthController(
   verifyLoginTwoFactorUseCase,
   refreshTokenUseCase,
   logoutUserUseCase,
+  logoutAllDevicesUseCase,
 );
 
 export const adminController = new AdminController(

@@ -4,7 +4,7 @@ Backend microservice autentikimi i ndërtuar me **TypeScript + Node.js + Express
 
 ---
 
-## 📋 Tabela e Përmbajtjes
+## Tabela e Përmbajtjes
 
 - [Stack Teknologjik](#stack-teknologjik)
 - [Arkitektura](#arkitektura)
@@ -13,6 +13,7 @@ Backend microservice autentikimi i ndërtuar me **TypeScript + Node.js + Express
 - [Setup i Plotë — Kubernetes](#setup-i-plotë--kubernetes)
 - [CI/CD Pipeline — Jenkins](#cicd-pipeline--jenkins)
 - [Endpointet API](#endpointet-api)
+- [Siguria](#siguria)
 - [Variablat e Mjedisit](#variablat-e-mjedisit)
 - [Testet](#testet)
 
@@ -30,6 +31,7 @@ Backend microservice autentikimi i ndërtuar me **TypeScript + Node.js + Express
 | Messaging         | Apache Kafka                                    |
 | Autentikimi       | JWT (access 15m + refresh 7d)                   |
 | 2FA               | TOTP nëpërmjet Speakeasy + Google Authenticator |
+| Logging           | Pino (structured JSON logging)                  |
 | Kontejnerizimi    | Docker + Kubernetes                             |
 | CI/CD             | Jenkins                                         |
 
@@ -87,7 +89,7 @@ curl http://localhost:5000/health
 2. Shko te **Settings → Kubernetes**
 3. Aktivizo **"Enable Kubernetes"**
 4. Kliko **"Apply & Restart"**
-5. Prit derisa ikona të bëhet jeshile ✅
+5. Prit derisa ikona të bëhet jeshile
 
 Verifiko:
 
@@ -100,10 +102,8 @@ kubectl get nodes
 ### Hapi 2 — Krijo Namespace dhe Sekrete
 
 ```powershell
-# Krijo namespace
 kubectl apply -f k8s/namespace.yaml
 
-# Krijo sekrete (ndrysho vlerat!)
 kubectl create secret generic auth-secrets `
   --namespace=auth-service `
   --from-literal=JWT_ACCESS_SECRET="vlera_jote_e_sigurt" `
@@ -113,11 +113,10 @@ kubectl create secret generic auth-secrets `
   --from-literal=POSTGRES_PASSWORD="vlera_jote_e_sigurt" `
   --from-literal=REDIS_PASSWORD="vlera_jote_e_sigurt"
 
-# Verifiko
 kubectl get secret auth-secrets -n auth-service
 ```
 
-> ⚠️ `secret.yaml` nuk ekziston në repo me qëllim — sekrete krijohen direkt me kubectl.
+> `secret.yaml` nuk ekziston në repo me qëllim — sekrete krijohen direkt me kubectl.
 
 ### Hapi 3 — Deploy Kubernetes
 
@@ -135,16 +134,15 @@ kubectl apply -f k8s/service.yaml
 
 ```powershell
 kubectl get pods -n auth-service -w
-# Prit derisa të gjitha të jenë 1/1 Running
 ```
 
 ### Hapi 5 — Port Forward dhe Testo
 
 ```powershell
-# Terminal 1 — lëre hapur
+# Terminal 1
 kubectl port-forward service/auth-service 30500:5000 -n auth-service
 
-# Terminal 2 — testo
+# Terminal 2
 curl http://localhost:30500/health
 ```
 
@@ -158,15 +156,9 @@ curl http://localhost:30500/health
 docker build -f Dockerfile.jenkins -t jenkins-custom:latest .
 ```
 
-Imazhi përfshin: `docker CLI`, `kubectl`, `python3 + PyYAML`, `node 20`.
-
 ### Hapi 2 — Aktivizo Docker TCP në Docker Desktop
 
-Shko te **Docker Desktop → Settings → General** dhe aktivizo:
-
-```
-✅ Expose daemon on tcp://localhost:2375 without TLS
-```
+**Docker Desktop → Settings → General → Expose daemon on tcp://localhost:2375 without TLS**
 
 ### Hapi 3 — Starto Jenkins
 
@@ -187,110 +179,93 @@ docker run -d `
 ### Hapi 4 — Konfiguro Jenkins
 
 ```powershell
-# Merr passwordin fillestar
 docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
-Hap **http://localhost:8080** dhe:
-
-1. Fut passwordin fillestar
-2. Instalo plugin-et e sugjeruara
-3. Shko te **Manage Jenkins → Credentials → Global**
-4. Shto credential të re:
-   - **Kind**: Username with password
-   - **ID**: `docker-hub-credentials`
-   - **Username**: username-i Docker Hub
-   - **Password**: Docker Hub Personal Access Token
-
-### Hapi 5 — Krijo Pipeline Job
-
-1. **New Item → Pipeline**
-2. **Name**: `2AF-Pipeline`
-3. **Pipeline → Definition**: Pipeline script from SCM
-4. **SCM**: Git
-5. **Repository URL**: `https://github.com/getuar04/2AF.git`
-6. **Branch**: `*/main`
-7. **Script Path**: `Jenkinsfile`
-
-### Hapi 6 — Triggero Build
-
-Çdo `git push origin main` triggeron pipeline automatikisht.
-
-Ose manualisht: **Build Now** në http://localhost:8080.
+Hap **http://localhost:8080**, fut passwordin, instalo plugin-et e sugjeruara.
 
 ### Çfarë bën Pipeline-i
 
 ```
 1. Checkout          → klonon kodin nga GitHub
-2. Setup Kubeconfig  → rregullon host.docker.internal + TLS
+2. Setup Kubeconfig  → rregullon host.docker.internal
 3. Install Deps      → npm install
-4. Run Tests         → 82 teste (unit + integration)
-5. Pre-pull Image    → docker pull node:20-alpine
-6. Build Image       → docker build 2af-auth-service:build-XX
-7. Deploy K8s        → kubectl apply + rollout
+4. Run Tests         → 114 teste (unit + integration)
+5. Build Image       → docker build 2af-auth-service:build-XX
+6. Deploy K8s        → kubectl apply + rollout
 ```
 
 ---
-
-# Hapi 1 - Login dhe ruaj session
-
-$login = Invoke-RestMethod -Method POST -Uri "http://localhost:30500/auth/login" -ContentType "application/json" -Body '{"email":"admin@test.ts","password":"12345678"}' -SessionVariable session
-
-$accessToken = $login.accessToken
-echo "Access Token: $accessToken"
-
-# Hapi 2 - Refresh (cookie dërgohet automatikisht nga session)
-
-$refresh = Invoke-RestMethod -Method POST -Uri "http://localhost:30500/auth/refresh" -WebSession $session
-$newAccessToken = $refresh.accessToken
-echo "Access Token i Ri: $newAccessToken"
-
-# Hapi 3 - Perdor token-in e ri per nje endpoint
-
-$headers = @{ "Authorization" = "Bearer $newAccessToken" }
-$auditLogs = Invoke-RestMethod -Method GET -Uri "http://localhost:30500/admin/audit-logs" -Headers $headers
-$auditLogs | ConvertTo-Json -Depth 3
 
 ## Endpointet API
 
 ### Auth
 
-| Metoda | Endpoint            | Përshkrimi      | Auth      |
-| ------ | ------------------- | --------------- | --------- |
-| POST   | `/auth/register`    | Regjistrim      | —         |
-| POST   | `/auth/login`       | Login           | —         |
-| POST   | `/auth/login/2fa`   | Verifikim 2FA   | —         |
-| POST   | `/auth/2fa/init`    | Fillo setup 2FA | ✅ Bearer |
-| POST   | `/auth/2fa/confirm` | Konfirmo 2FA    | ✅ Bearer |
-| POST   | `/auth/refresh`     | Rinovim token   | Cookie    |
-| POST   | `/auth/logout`      | Logout          | ✅ Bearer |
+| Metoda | Endpoint              | Përshkrimi                        | Auth      |
+| ------ | --------------------- | --------------------------------- | --------- |
+| POST   | `/auth/register`      | Regjistrim                        | —         |
+| POST   | `/auth/login`         | Login                             | —         |
+| POST   | `/auth/login/2fa`     | Verifikim 2FA                     | —         |
+| POST   | `/auth/2fa/init`      | Fillo setup 2FA                   | Bearer    |
+| POST   | `/auth/2fa/confirm`   | Konfirmo setup 2FA                | Bearer    |
+| POST   | `/auth/2fa/disable`   | Çaktivizo 2FA (kërkon password)   | Bearer    |
+| POST   | `/auth/refresh`       | Rinovim token (rotation)          | Cookie    |
+| POST   | `/auth/logout`        | Logout nga pajisja aktuale        | Bearer    |
+| POST   | `/auth/logout-all`    | Logout nga të gjitha pajisjet     | Bearer    |
 
 ### Admin
 
-| Metoda | Endpoint                                | Përshkrimi           | Auth     |
-| ------ | --------------------------------------- | -------------------- | -------- |
-| GET    | `/admin/audit-logs`                     | Audit logs me filtra | ✅ Admin |
-| GET    | `/admin/debug/redis/health`             | Status Redis         | ✅ Admin |
-| GET    | `/admin/debug/login-challenge/:id`      | Debug challenge      | ✅ Admin |
-| GET    | `/admin/debug/2fa-setup/:userId/:token` | Debug 2FA setup      | ✅ Admin |
+| Metoda | Endpoint                                | Përshkrimi           | Auth              |
+| ------ | --------------------------------------- | -------------------- | ----------------- |
+| GET    | `/admin/audit-logs`                     | Audit logs me filtra | Admin Bearer      |
+| GET    | `/admin/debug/redis/health`             | Status Redis         | Admin + InternalKey |
+| GET    | `/admin/debug/login-challenge/:id`      | Debug challenge      | Admin + InternalKey |
+| GET    | `/admin/debug/2fa-setup/:userId/:token` | Debug 2FA setup      | Admin + InternalKey |
+
+> Debug endpoints kërkojnë edhe header `x-internal-api-key`.
+
+### Health
+
+| Metoda | Endpoint  | Përshkrimi                                    |
+| ------ | --------- | --------------------------------------------- |
+| GET    | `/health` | Status i shërbimit + PostgreSQL, Redis, MongoDB |
 
 ### Shembuj
 
 ```powershell
 # Register
-curl -X POST http://localhost:30500/auth/register `
+curl -X POST http://localhost:5000/auth/register `
   -H "Content-Type: application/json" `
   -d '{"fullName":"Getuar Jakupi","email":"getuar@test.com","password":"Password123"}'
 
 # Login
-curl -X POST http://localhost:30500/auth/login `
+curl -X POST http://localhost:5000/auth/login `
   -H "Content-Type: application/json" `
   -d '{"email":"getuar@test.com","password":"Password123"}'
 
-# Shiko users në PostgreSQL
-kubectl exec -it deployment/postgres -n auth-service -- `
-  psql -U postgres -d 2af -c "SELECT id, full_name, email, role, is_two_factor_enabled FROM users;"
+# Logout nga të gjitha pajisjet
+curl -X POST http://localhost:5000/auth/logout-all `
+  -H "Authorization: Bearer <accessToken>"
+
+# Health check
+curl http://localhost:5000/health
 ```
+
+---
+
+## Siguria
+
+| Feature                   | Përshkrimi                                                     |
+| ------------------------- | -------------------------------------------------------------- |
+| JWT Blacklist             | Access token invalidohet menjëherë pas logout                  |
+| Refresh Token Rotation    | Çdo refresh lëshon token të ri, i vjetri invalidohet           |
+| Logout All Devices        | Invalidon të gjitha session-et aktive nëpërmjet generation key |
+| 2FA TOTP                  | Google Authenticator / çdo TOTP app                           |
+| Rate Limiting             | Login: 10/15min, Register: 5/orë, 2FA: 5/5min                 |
+| Helmet.js                 | 12 HTTP security headers (CSP, HSTS, X-Frame-Options etj)     |
+| Input Validation          | Validim i fushave para use case (required, type, length)       |
+| Audit Logs me IP          | Çdo veprim regjistron userId, email, IP, User-Agent            |
+| internalAuth              | Debug endpoints kërkojnë API key shtesë                        |
 
 ---
 
@@ -299,25 +274,28 @@ kubectl exec -it deployment/postgres -n auth-service -- `
 | Token          | Transport                      | TTL       | Ku ruhet          |
 | -------------- | ------------------------------ | --------- | ----------------- |
 | `accessToken`  | `Authorization: Bearer` header | 15 minuta | Memory (frontend) |
-| `refreshToken` | `Set-Cookie: HttpOnly Secure`  | 7 ditë    | Cookie (browser)  |
-| Blacklist      | —                              | 900s      | Redis             |
+| `refreshToken` | `Set-Cookie: HttpOnly Strict`  | 7 ditë    | Cookie (browser)  |
+| Blacklist      | Redis                          | 15 min    | Redis             |
+| Generation Key | Redis                          | 7 ditë    | Redis             |
 
 ---
 
 ## Variablat e Mjedisit
 
-| Variabla             | Përshkrimi                       | Default  |
-| -------------------- | -------------------------------- | -------- |
-| `APP_RUNTIME_MODE`   | `memory` ose `production`        | `memory` |
-| `PORT`               | Porta e serverit                 | `5000`   |
-| `JWT_ACCESS_SECRET`  | Sekret për access token          | —        |
-| `JWT_REFRESH_SECRET` | Sekret për refresh token         | —        |
-| `INTERNAL_API_KEY`   | Çelës për komunikim ndër-service | —        |
-| `POSTGRES_URL`       | URL e PostgreSQL                 | —        |
-| `REDIS_URL`          | URL e Redis                      | —        |
-| `MONGODB_URL`        | URL e MongoDB                    | —        |
-| `KAFKA_BROKERS`      | Adresat e Kafka brokerëve        | —        |
-| `ADMIN_EMAILS`       | Emailat admin (ndarë me presje)  | —        |
+| Variabla               | Përshkrimi                       | Default  |
+| ---------------------- | -------------------------------- | -------- |
+| `APP_RUNTIME_MODE`     | `memory` ose `production`        | `memory` |
+| `PORT`                 | Porta e serverit                 | `5000`   |
+| `JWT_ACCESS_SECRET`    | Sekret për access token          | —        |
+| `JWT_REFRESH_SECRET`   | Sekret për refresh token         | —        |
+| `INTERNAL_API_KEY`     | Çelës për debug endpoints        | —        |
+| `POSTGRES_URL`         | URL e PostgreSQL                 | —        |
+| `REDIS_URL`            | URL e Redis                      | —        |
+| `MONGODB_URL`          | URL e MongoDB                    | —        |
+| `KAFKA_BROKERS`        | Adresat e Kafka brokerëve        | —        |
+| `KAFKA_ENABLED`        | Aktivizo Kafka (`true`/`false`)  | `false`  |
+| `ADMIN_EMAILS`         | Emailat admin (ndarë me presje)  | —        |
+| `TWO_FA_EXPIRES_SECONDS` | TTL i setup-it 2FA             | `300`    |
 
 ---
 
@@ -332,14 +310,17 @@ npm test -- tests/unit
 
 # Vetëm integration teste
 npm test -- tests/integration
+
+# Me coverage
+npm run test:coverage
 ```
 
 ### Rezultati
 
 ```
-Test Suites: 10 passed
-Tests:       82 passed
-Coverage:    83.95% statements
+Test Suites: 15 passed
+Tests:       114 passed
+Coverage:    100% (app/domain)
 ```
 
 ### Struktura e Testeve
@@ -348,7 +329,7 @@ Coverage:    83.95% statements
 tests/
 ├── unit/
 │   ├── domain/auth/          # Policy tests
-│   └── app/usecases/         # Use case tests
+│   └── app/usecases/         # Use case tests (100% coverage)
 └── integration/
     ├── auth.routes.spec.ts   # Auth endpoint tests
     └── admin.routes.spec.ts  # Admin endpoint tests
@@ -359,32 +340,25 @@ tests/
 ## Troubleshooting
 
 **Jenkins nuk lidhet me Docker:**
-
 ```powershell
-# Aktivizo Docker TCP: Docker Desktop → Settings → General
-# ✅ Expose daemon on tcp://localhost:2375 without TLS
-```
-
-**kubectl connection refused brenda Jenkins:**
-
-```powershell
-# Pipeline e rregullon automatikisht — Setup Kubeconfig stage
-# Testo manualisht:
-docker exec jenkins sh -c "cp /var/jenkins_home/.kube/config /tmp/k.conf && \
-  sed -i 's|127.0.0.1|host.docker.internal|g' /tmp/k.conf && \
-  kubectl --kubeconfig /tmp/k.conf --insecure-skip-tls-verify get nodes"
+# Docker Desktop → Settings → General
+# Aktivizo: Expose daemon on tcp://localhost:2375 without TLS
 ```
 
 **Pod nuk starton (ImagePullBackOff):**
-
 ```powershell
-# Sigurohu që imagePullPolicy është IfNotPresent në deployment.yaml
 kubectl describe pod -n auth-service | grep -A5 "Events"
+# Sigurohu që imagePullPolicy është IfNotPresent
 ```
 
 **Sekret mungon:**
-
 ```powershell
 kubectl get secret auth-secrets -n auth-service
 # Nëse nuk ekziston, ekzekuto Hapin 2 të Setup Kubernetes
+```
+
+**Health check kthen 503:**
+```powershell
+curl http://localhost:5000/health
+# Kontrollo cilat shërbime janë degraded: postgres/redis/mongodb
 ```

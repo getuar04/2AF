@@ -8,6 +8,8 @@ export interface CreateAuditLogInput {
   email?: string;
   reason?: string;
   metadata?: Record<string, unknown>;
+  ip?: string;
+  userAgent?: string;
   createdAt: Date;
 }
 
@@ -28,5 +30,9 @@ export interface PaginatedAuditLogs {
 
 export interface AuthAuditRepository {
   create(input: CreateAuditLogInput): Promise<AuditLog>;
-  findAll(filters: AuditLogFilters, page: number, limit: number): Promise<PaginatedAuditLogs>;
+  findAll(
+    filters: AuditLogFilters,
+    page: number,
+    limit: number,
+  ): Promise<PaginatedAuditLogs>;
 }
