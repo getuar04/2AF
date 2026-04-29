@@ -95,7 +95,7 @@ export class EnableTwoFactor {
     );
     // console.log("🧺 cacheKey:", cacheKey);
     const pendingSecret = await this.cacheProvider.get(cacheKey);
-// console.log('🦃 pendingSecret:', pendingSecret);
+    // console.log('🦃 pendingSecret:', pendingSecret);
     if (!pendingSecret) {
       throw new AppError(
         "2FA setup session expired or not found",
