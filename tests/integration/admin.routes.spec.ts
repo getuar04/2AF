@@ -146,7 +146,8 @@ describe("Admin routes", () => {
     it("should return redis health for admin", async () => {
       const response = await request(app)
         .get("/admin/debug/redis/health")
-        .set("Authorization", `Bearer ${adminToken}`);
+        .set("Authorization", `Bearer ${adminToken}`)
+        .set("x-internal-api-key", env.app.internalApiKey);
       expect(response.status).toBe(200);
       expect(response.body.status).toBe("ok");
     });
@@ -156,7 +157,8 @@ describe("Admin routes", () => {
     it("should return exists=false when challenge is missing", async () => {
       const response = await request(app)
         .get("/admin/debug/login-challenge/missing-challenge")
-        .set("Authorization", `Bearer ${adminToken}`);
+        .set("Authorization", `Bearer ${adminToken}`)
+        .set("x-internal-api-key", env.app.internalApiKey); // shto këtë
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
         type: "LOGIN_CHALLENGE",
@@ -179,7 +181,8 @@ describe("Admin routes", () => {
       );
       const response = await request(app)
         .get("/admin/debug/login-challenge/test-challenge")
-        .set("Authorization", `Bearer ${adminToken}`);
+        .set("Authorization", `Bearer ${adminToken}`)
+        .set("x-internal-api-key", env.app.internalApiKey); // shto këtë
       expect(response.status).toBe(200);
       expect(response.body.type).toBe("LOGIN_CHALLENGE");
       expect(response.body.key).toBe("2fa:login:test-challenge");
@@ -195,7 +198,8 @@ describe("Admin routes", () => {
     it("should return exists=false when setup token is missing", async () => {
       const response = await request(app)
         .get("/admin/debug/2fa-setup/u1/token123")
-        .set("Authorization", `Bearer ${adminToken}`);
+        .set("Authorization", `Bearer ${adminToken}`)
+        .set("x-internal-api-key", env.app.internalApiKey); // shto këtë
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
         type: "TWO_FACTOR_SETUP",
@@ -217,7 +221,8 @@ describe("Admin routes", () => {
       );
       const response = await request(app)
         .get("/admin/debug/2fa-setup/u1/token123")
-        .set("Authorization", `Bearer ${adminToken}`);
+        .set("Authorization", `Bearer ${adminToken}`)
+        .set("x-internal-api-key", env.app.internalApiKey); // shto këtë
       expect(response.status).toBe(200);
       expect(response.body.type).toBe("TWO_FACTOR_SETUP");
       expect(response.body.key).toBe("2fa:setup:u1:token123");
