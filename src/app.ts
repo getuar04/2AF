@@ -8,6 +8,8 @@ import { errorHandler } from "./infra/http/middlewares/errorHandler";
 import { env } from "./infra/config/env";
 import { logger } from "./infra/logger/logger";
 import { getHealthStatus } from "./infra/health/healthCheck";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./infra/http/swagger";
 
 export function createApp() {
   const app = express();
@@ -15,6 +17,7 @@ export function createApp() {
   app.use(express.json({ limit: "10kb" }));
   app.use(cookieParser());
   app.use(pinoHttp({ logger }));
+  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
   app.get("/health", async (_req, res) => {
     const health = await getHealthStatus();

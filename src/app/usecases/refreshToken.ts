@@ -37,7 +37,7 @@ export class RefreshToken {
     const generationKey = `auth:session:generation:${payload.userId}`;
     const currentGeneration = await this.cacheProvider.get(generationKey);
     if (currentGeneration) {
-      const tokenIssuedAt = (payload as any).iat as number;
+      const tokenIssuedAt = (payload as { iat?: number }).iat ?? 0;
       const generationTime = parseInt(currentGeneration, 10);
       if (tokenIssuedAt * 1000 < generationTime) {
         throw new AppError("Session has been invalidated", 401, "SESSION_INVALIDATED");

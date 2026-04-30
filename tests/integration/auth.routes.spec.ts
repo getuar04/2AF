@@ -31,13 +31,11 @@ describe("Auth routes", () => {
   });
 
   it("login returns accessToken and sets refreshToken cookie", async () => {
-    await request(app)
-      .post("/auth/register")
-      .send({
-        fullName: "Login Test",
-        email: "logintest@example.com",
-        password: "Password123",
-      });
+    await request(app).post("/auth/register").send({
+      fullName: "Login Test",
+      email: "logintest@example.com",
+      password: "Password123",
+    });
 
     const res = await request(app)
       .post("/auth/login")
@@ -52,13 +50,11 @@ describe("Auth routes", () => {
   });
 
   it("refresh token returns new accessToken", async () => {
-    await request(app)
-      .post("/auth/register")
-      .send({
-        fullName: "Refresh Test",
-        email: "refreshtest@example.com",
-        password: "Password123",
-      });
+    await request(app).post("/auth/register").send({
+      fullName: "Refresh Test",
+      email: "refreshtest@example.com",
+      password: "Password123",
+    });
 
     const loginRes = await request(app)
       .post("/auth/login")
@@ -78,13 +74,11 @@ describe("Auth routes", () => {
   });
 
   it("logout invalidates token and clears cookie", async () => {
-    await request(app)
-      .post("/auth/register")
-      .send({
-        fullName: "Logout Test",
-        email: "logouttest@example.com",
-        password: "Password123",
-      });
+    await request(app).post("/auth/register").send({
+      fullName: "Logout Test",
+      email: "logouttest@example.com",
+      password: "Password123",
+    });
 
     const loginRes = await request(app)
       .post("/auth/login")
@@ -112,13 +106,11 @@ describe("Auth routes", () => {
   });
 
   it("refresh token rotation: reusing an old refresh token should fail", async () => {
-    await request(app)
-      .post("/auth/register")
-      .send({
-        fullName: "Rotation Test",
-        email: "rotation@example.com",
-        password: "Password123",
-      });
+    await request(app).post("/auth/register").send({
+      fullName: "Rotation Test",
+      email: "rotation@example.com",
+      password: "Password123",
+    });
 
     const loginRes = await request(app)
       .post("/auth/login")
@@ -261,5 +253,61 @@ describe("Auth routes", () => {
     ] as unknown as string[];
     expect(verifyCookies).toBeDefined();
     expect(verifyCookies[0]).toContain("refreshToken");
+  });
+  it("logout-all invalidates all sessions", async () => {
+    await request(app).post("/auth/register").send({
+      fullName: "Logout All Test",
+      email: "logoutall@example.com",
+      password: "Password123",
+    });
+
+    // Login nga "pajisja 1"
+    const login1 = await request(app)
+      .post("/auth/login")
+      .send({ email: "logoutall@example.com", password: "Password123" })
+      .expect(200);
+
+    const accessToken = login1.body.accessToken as string;
+    const setCookie1 = login1.headers["set-cookie"] as unknown as string[];
+    const refreshCookie1 =
+      setCookie1.find((c: string) => c.startsWith("refreshToken=")) ?? "";
+
+    // Login nga "pajisja 2"
+    const login2 = await request(app)
+      .post("/auth/login")
+      .send({ email: "logoutall@example.com", password: "Password123" })
+      .expect(200);
+
+    const setCookie2 = login2.headers["set-cookie"] as unknown as string[];
+    const refreshCookie2 =
+      setCookie2.find((c: string) => c.startsWith("refreshToken=")) ?? "";
+
+    // Logout nga të gjitha pajisjet
+    const logoutAllRes = await request(app)
+      .post("/auth/logout-all")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .expect(200);
+
+    expect(logoutAllRes.body.message).toMatch(/all devices/i);
+
+    // Pajisja 1 — refresh duhet të dështojë (SESSION_INVALIDATED)
+    const refresh1 = await request(app)
+      .post("/auth/refresh")
+      .set("Cookie", refreshCookie1)
+      .expect(401);
+
+    expect(refresh1.body.error.code).toBe("SESSION_INVALIDATED");
+
+    // Pajisja 2 — refresh duhet të dështojë gjithashtu
+    const refresh2 = await request(app)
+      .post("/auth/refresh")
+      .set("Cookie", refreshCookie2)
+      .expect(401);
+
+    expect(refresh2.body.error.code).toBe("SESSION_INVALIDATED");
+  });
+
+  it("logout-all requires authentication", async () => {
+    await request(app).post("/auth/logout-all").expect(401);
   });
 });

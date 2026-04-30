@@ -6,16 +6,16 @@ Backend microservice autentikimi i ndërtuar me **TypeScript + Node.js + Express
 
 ## Tabela e Përmbajtjes
 
-- [Stack Teknologjik](#stack-teknologjik)
-- [Arkitektura](#arkitektura)
-- [Kërkesat](#kërkesat)
+- [Stack Teknologjik ](#stack-teknologjik)
+- [Arkitektura ](#arkitektura)
+- [Kërkesat ](#kërkesat)
 - [Setup i Shpejtë — Docker Compose](#setup-i-shpejtë--docker-compose)
-- [Setup i Plotë — Kubernetes](#setup-i-plotë--kubernetes)
-- [CI/CD Pipeline — Jenkins](#cicd-pipeline--jenkins)
-- [Endpointet API](#endpointet-api)
-- [Siguria](#siguria)
-- [Variablat e Mjedisit](#variablat-e-mjedisit)
-- [Testet](#testet)
+- [Setup i Plotë — Kubernetes ](#setup-i-plotë--kubernetes)
+- [CI/CD Pipeline — Jenkins ](#cicd-pipeline--jenkins)
+- [Endpointet API ](#endpointet-api)
+- [Siguria ](#siguria)
+- [Variablat e Mjedisit ](#variablat-e-mjedisit)
+- [Testet ](#testet)
 
 ---
 
@@ -201,23 +201,23 @@ Hap **http://localhost:8080**, fut passwordin, instalo plugin-et e sugjeruara.
 
 ### Auth
 
-| Metoda | Endpoint              | Përshkrimi                        | Auth      |
-| ------ | --------------------- | --------------------------------- | --------- |
-| POST   | `/auth/register`      | Regjistrim                        | —         |
-| POST   | `/auth/login`         | Login                             | —         |
-| POST   | `/auth/login/2fa`     | Verifikim 2FA                     | —         |
-| POST   | `/auth/2fa/init`      | Fillo setup 2FA                   | Bearer    |
-| POST   | `/auth/2fa/confirm`   | Konfirmo setup 2FA                | Bearer    |
-| POST   | `/auth/2fa/disable`   | Çaktivizo 2FA (kërkon password)   | Bearer    |
-| POST   | `/auth/refresh`       | Rinovim token (rotation)          | Cookie    |
-| POST   | `/auth/logout`        | Logout nga pajisja aktuale        | Bearer    |
-| POST   | `/auth/logout-all`    | Logout nga të gjitha pajisjet     | Bearer    |
+| Metoda | Endpoint            | Përshkrimi                      | Auth   |
+| ------ | ------------------- | ------------------------------- | ------ |
+| POST   | `/auth/register`    | Regjistrim                      | —      |
+| POST   | `/auth/login`       | Login                           | —      |
+| POST   | `/auth/login/2fa`   | Verifikim 2FA                   | —      |
+| POST   | `/auth/2fa/init`    | Fillo setup 2FA                 | Bearer |
+| POST   | `/auth/2fa/confirm` | Konfirmo setup 2FA              | Bearer |
+| POST   | `/auth/2fa/disable` | Çaktivizo 2FA (kërkon password) | Bearer |
+| POST   | `/auth/refresh`     | Rinovim token (rotation)        | Cookie |
+| POST   | `/auth/logout`      | Logout nga pajisja aktuale      | Bearer |
+| POST   | `/auth/logout-all`  | Logout nga të gjitha pajisjet   | Bearer |
 
 ### Admin
 
-| Metoda | Endpoint                                | Përshkrimi           | Auth              |
-| ------ | --------------------------------------- | -------------------- | ----------------- |
-| GET    | `/admin/audit-logs`                     | Audit logs me filtra | Admin Bearer      |
+| Metoda | Endpoint                                | Përshkrimi           | Auth                |
+| ------ | --------------------------------------- | -------------------- | ------------------- |
+| GET    | `/admin/audit-logs`                     | Audit logs me filtra | Admin Bearer        |
 | GET    | `/admin/debug/redis/health`             | Status Redis         | Admin + InternalKey |
 | GET    | `/admin/debug/login-challenge/:id`      | Debug challenge      | Admin + InternalKey |
 | GET    | `/admin/debug/2fa-setup/:userId/:token` | Debug 2FA setup      | Admin + InternalKey |
@@ -226,8 +226,8 @@ Hap **http://localhost:8080**, fut passwordin, instalo plugin-et e sugjeruara.
 
 ### Health
 
-| Metoda | Endpoint  | Përshkrimi                                    |
-| ------ | --------- | --------------------------------------------- |
+| Metoda | Endpoint  | Përshkrimi                                      |
+| ------ | --------- | ----------------------------------------------- |
 | GET    | `/health` | Status i shërbimit + PostgreSQL, Redis, MongoDB |
 
 ### Shembuj
@@ -255,17 +255,17 @@ curl http://localhost:5000/health
 
 ## Siguria
 
-| Feature                   | Përshkrimi                                                     |
-| ------------------------- | -------------------------------------------------------------- |
-| JWT Blacklist             | Access token invalidohet menjëherë pas logout                  |
-| Refresh Token Rotation    | Çdo refresh lëshon token të ri, i vjetri invalidohet           |
-| Logout All Devices        | Invalidon të gjitha session-et aktive nëpërmjet generation key |
-| 2FA TOTP                  | Google Authenticator / çdo TOTP app                           |
-| Rate Limiting             | Login: 10/15min, Register: 5/orë, 2FA: 5/5min                 |
-| Helmet.js                 | 12 HTTP security headers (CSP, HSTS, X-Frame-Options etj)     |
-| Input Validation          | Validim i fushave para use case (required, type, length)       |
-| Audit Logs me IP          | Çdo veprim regjistron userId, email, IP, User-Agent            |
-| internalAuth              | Debug endpoints kërkojnë API key shtesë                        |
+| Feature                | Përshkrimi                                                     |
+| ---------------------- | -------------------------------------------------------------- |
+| JWT Blacklist          | Access token invalidohet menjëherë pas logout                  |
+| Refresh Token Rotation | Çdo refresh lëshon token të ri, i vjetri invalidohet           |
+| Logout All Devices     | Invalidon të gjitha session-et aktive nëpërmjet generation key |
+| 2FA TOTP               | Google Authenticator / çdo TOTP app                            |
+| Rate Limiting          | Login: 10/15min, Register: 5/orë, 2FA: 5/5min                  |
+| Helmet.js              | 12 HTTP security headers (CSP, HSTS, X-Frame-Options etj)      |
+| Input Validation       | Validim i fushave para use case (required, type, length)       |
+| Audit Logs me IP       | Çdo veprim regjistron userId, email, IP, User-Agent            |
+| internalAuth           | Debug endpoints kërkojnë API key shtesë                        |
 
 ---
 
@@ -282,20 +282,20 @@ curl http://localhost:5000/health
 
 ## Variablat e Mjedisit
 
-| Variabla               | Përshkrimi                       | Default  |
-| ---------------------- | -------------------------------- | -------- |
-| `APP_RUNTIME_MODE`     | `memory` ose `production`        | `memory` |
-| `PORT`                 | Porta e serverit                 | `5000`   |
-| `JWT_ACCESS_SECRET`    | Sekret për access token          | —        |
-| `JWT_REFRESH_SECRET`   | Sekret për refresh token         | —        |
-| `INTERNAL_API_KEY`     | Çelës për debug endpoints        | —        |
-| `POSTGRES_URL`         | URL e PostgreSQL                 | —        |
-| `REDIS_URL`            | URL e Redis                      | —        |
-| `MONGODB_URL`          | URL e MongoDB                    | —        |
-| `KAFKA_BROKERS`        | Adresat e Kafka brokerëve        | —        |
-| `KAFKA_ENABLED`        | Aktivizo Kafka (`true`/`false`)  | `false`  |
-| `ADMIN_EMAILS`         | Emailat admin (ndarë me presje)  | —        |
-| `TWO_FA_EXPIRES_SECONDS` | TTL i setup-it 2FA             | `300`    |
+| Variabla                 | Përshkrimi                      | Default  |
+| ------------------------ | ------------------------------- | -------- |
+| `APP_RUNTIME_MODE`       | `memory` ose `production`       | `memory` |
+| `PORT`                   | Porta e serverit                | `5000`   |
+| `JWT_ACCESS_SECRET`      | Sekret për access token         | —        |
+| `JWT_REFRESH_SECRET`     | Sekret për refresh token        | —        |
+| `INTERNAL_API_KEY`       | Çelës për debug endpoints       | —        |
+| `POSTGRES_URL`           | URL e PostgreSQL                | —        |
+| `REDIS_URL`              | URL e Redis                     | —        |
+| `MONGODB_URL`            | URL e MongoDB                   | —        |
+| `KAFKA_BROKERS`          | Adresat e Kafka brokerëve       | —        |
+| `KAFKA_ENABLED`          | Aktivizo Kafka (`true`/`false`) | `false`  |
+| `ADMIN_EMAILS`           | Emailat admin (ndarë me presje) | —        |
+| `TWO_FA_EXPIRES_SECONDS` | TTL i setup-it 2FA              | `300`    |
 
 ---
 
@@ -340,24 +340,28 @@ tests/
 ## Troubleshooting
 
 **Jenkins nuk lidhet me Docker:**
+
 ```powershell
 # Docker Desktop → Settings → General
 # Aktivizo: Expose daemon on tcp://localhost:2375 without TLS
 ```
 
 **Pod nuk starton (ImagePullBackOff):**
+
 ```powershell
 kubectl describe pod -n auth-service | grep -A5 "Events"
 # Sigurohu që imagePullPolicy është IfNotPresent
 ```
 
 **Sekret mungon:**
+
 ```powershell
 kubectl get secret auth-secrets -n auth-service
 # Nëse nuk ekziston, ekzekuto Hapin 2 të Setup Kubernetes
 ```
 
 **Health check kthen 503:**
+
 ```powershell
 curl http://localhost:5000/health
 # Kontrollo cilat shërbime janë degraded: postgres/redis/mongodb

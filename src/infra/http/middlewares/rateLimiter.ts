@@ -1,4 +1,5 @@
 import rateLimit from "express-rate-limit";
+import { Request } from "express";
 
 const isTest = process.env.NODE_ENV === "test";
 
@@ -8,11 +9,11 @@ export const loginRateLimiter = rateLimit({
   message: {
     error: {
       message: "Shumë tentativa login. Provo pas 15 minutave.",
-      code: "TOO_MANY_LOGIN_ATTEMPTS"
-    }
+      code: "TOO_MANY_LOGIN_ATTEMPTS",
+    },
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
 });
 
 export const registerRateLimiter = rateLimit({
@@ -21,11 +22,11 @@ export const registerRateLimiter = rateLimit({
   message: {
     error: {
       message: "Shumë tentativa regjistrim. Provo pas 1 ore.",
-      code: "TOO_MANY_REGISTER_ATTEMPTS"
-    }
+      code: "TOO_MANY_REGISTER_ATTEMPTS",
+    },
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
 });
 
 export const twoFactorRateLimiter = rateLimit({
@@ -34,9 +35,35 @@ export const twoFactorRateLimiter = rateLimit({
   message: {
     error: {
       message: "Shumë tentativa 2FA. Provo pas 5 minutave.",
-      code: "TOO_MANY_2FA_ATTEMPTS"
-    }
+      code: "TOO_MANY_2FA_ATTEMPTS",
+    },
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+});
+
+// Rate limiter per userId — bllokon brute force edhe me IP të ndryshme
+export const userIdRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isTest ? 1000 : 10,
+  keyGenerator: (req: Request): string => {
+    // Përdor email nga body si çelës — para se të dish userId
+    const email = (req.body as { email?: string })?.email?.toLowerCase().trim();
+    const ip = (req.ip ?? "unknown").replace(/^::ffff:/, "");
+    return email ?? ip;
+  },
+  message: {
+    error: {
+      message: "Shumë tentativa për këtë llogari. Provo pas 15 minutave.",
+      code: "TOO_MANY_ATTEMPTS_FOR_ACCOUNT",
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { keyGeneratorIpFallback: false },
+  skip: (req: Request): boolean => {
+    // Skip nëse nuk ka email në body
+    const email = (req.body as { email?: string })?.email;
+    return !email;
+  },
 });

@@ -5,6 +5,7 @@ import {
   loginRateLimiter,
   registerRateLimiter,
   twoFactorRateLimiter,
+  userIdRateLimiter,
 } from "../middlewares/rateLimiter";
 import { validateBody } from "../middlewares/validateBody";
 
@@ -24,6 +25,7 @@ router.post(
 router.post(
   "/login",
   loginRateLimiter,
+  userIdRateLimiter,
   validateBody({
     email: { required: true, type: "email" },
     password: { required: true, type: "string" },
